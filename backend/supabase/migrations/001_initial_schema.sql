@@ -177,9 +177,9 @@ CREATE INDEX idx_leaderboard_level_score
 CREATE INDEX idx_leaderboard_user
   ON leaderboard_entries (user_id);
 
--- Daily leaderboard filtering (created_at::date = today's date)
+-- Daily leaderboard filtering (range query on timestamptz is IMMUTABLE-safe)
 CREATE INDEX idx_leaderboard_created_date
-  ON leaderboard_entries ((created_at::date));
+  ON leaderboard_entries (created_at);
 
 -- ---------------------------------------------------------------------------
 -- TABLE: entitlements

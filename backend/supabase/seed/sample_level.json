@@ -1,0 +1,74 @@
+{
+  "_comment": "Sample 5×5 easy level. In production: grid is 13×13+, answers stored separately (never shipped to client).",
+
+  "level": {
+    "version": 1,
+    "difficulty": "easy",
+    "is_premium": false,
+    "difficulty_multiplier": 1.0,
+
+    "grid_json": {
+      "rows": 5,
+      "cols": 5,
+      "cells": [
+        { "row": 0, "col": 0, "type": "letter", "number": 1 },
+        { "row": 0, "col": 1, "type": "letter" },
+        { "row": 0, "col": 2, "type": "letter", "number": 2 },
+        { "row": 0, "col": 3, "type": "letter" },
+        { "row": 0, "col": 4, "type": "letter" },
+
+        { "row": 1, "col": 0, "type": "letter" },
+        { "row": 1, "col": 1, "type": "black" },
+        { "row": 1, "col": 2, "type": "letter" },
+        { "row": 1, "col": 3, "type": "black" },
+        { "row": 1, "col": 4, "type": "letter", "number": 3 },
+
+        { "row": 2, "col": 0, "type": "letter", "number": 4 },
+        { "row": 2, "col": 1, "type": "letter" },
+        { "row": 2, "col": 2, "type": "letter" },
+        { "row": 2, "col": 3, "type": "letter" },
+        { "row": 2, "col": 4, "type": "letter" },
+
+        { "row": 3, "col": 0, "type": "letter" },
+        { "row": 3, "col": 1, "type": "black" },
+        { "row": 3, "col": 2, "type": "letter" },
+        { "row": 3, "col": 3, "type": "black" },
+        { "row": 3, "col": 4, "type": "letter" },
+
+        { "row": 4, "col": 0, "type": "letter", "number": 5 },
+        { "row": 4, "col": 1, "type": "letter" },
+        { "row": 4, "col": 2, "type": "letter", "number": 6 },
+        { "row": 4, "col": 3, "type": "letter" },
+        { "row": 4, "col": 4, "type": "letter" }
+      ]
+    },
+
+    "clues_json": {
+      "across": [
+        { "number": 1, "clue": "Opposite of night", "answer_length": 5, "start": { "row": 0, "col": 0 } },
+        { "number": 4, "clue": "A place to sleep", "answer_length": 5, "start": { "row": 2, "col": 0 } },
+        { "number": 5, "clue": "Baby cat", "answer_length": 5, "start": { "row": 4, "col": 0 } }
+      ],
+      "down": [
+        { "number": 1, "clue": "Daytime deity, informally", "answer_length": 5, "start": { "row": 0, "col": 0 } },
+        { "number": 2, "clue": "Center of an atom", "answer_length": 5, "start": { "row": 0, "col": 2 } },
+        { "number": 3, "clue": "Feline animal", "answer_length": 5, "start": { "row": 0, "col": 4 } },
+        { "number": 6, "clue": "Direction toward the sun at noon", "answer_length": 5, "start": { "row": 4, "col": 2 } }
+      ]
+    }
+  },
+
+  "_server_only": {
+    "_comment": "These fields are stored in DB but NEVER returned to clients.",
+    "answers": {
+      "1A": "DAYLI",
+      "4A": "BERTH",
+      "5A": "KITTEN",
+      "1D": "DUSK",
+      "2D": "NUCLEUS",
+      "3D": "CAT",
+      "6D": "SOUTH"
+    },
+    "answer_hash": "<computed by computeLevelAnswerHash() when seeding>"
+  }
+}

@@ -1,0 +1,447 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "1.0.0",
+  "lastUpdated": "2026-02-21",
+  "owner": "backend-agent",
+  "consumers": ["frontend-agent"],
+
+  "_changelog": [
+    { "version": "1.0.0", "date": "2026-02-21", "note": "Phase 1 initial contract — getLevel, submitScore, mergeGuestProgress" }
+  ],
+
+  "baseUrl": "${SUPABASE_URL}/functions/v1",
+
+  "auth": {
+    "schemes": {
+      "bearer": {
+        "description": "Supabase JWT from auth.signIn*. Pass as Authorization: Bearer <token>.",
+        "header": "Authorization",
+        "format": "Bearer <jwt>"
+      },
+      "guestId": {
+        "description": "Client-generated UUID v4, stored locally on first launch. Used for anonymous progress.",
+        "header": "x-guest-id",
+        "format": "<uuid-v4>"
+      }
+    }
+  },
+
+  "errorCodes": {
+    "400": "Bad request — malformed input",
+    "401": "Unauthenticated — valid JWT required",
+    "403": "Forbidden — insufficient entitlement",
+    "404": "Resource not found",
+    "405": "Method not allowed",
+    "422": "Anti-cheat validation failed",
+    "500": "Internal server error"
+  },
+
+  "errorShape": {
+    "description": "All error responses use this envelope",
+    "schema": {
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": { "type": "string" }
+      }
+    }
+  },
+
+  "endpoints": {
+
+    "getLevel": {
+      "method": "GET",
+      "path": "/getLevel",
+      "description": "Fetch a level's grid and clues. Also returns the caller's saved progress for that level (if any). answer_hash is NEVER included in the response.",
+      "auth": {
+        "required": false,
+        "notes": "Guests pass x-guest-id. Auth users pass Bearer JWT. Premium levels require Bearer JWT + active Pro entitlement."
+      },
+      "queryParams": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "required": true,
+          "description": "Level UUID"
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["level"],
+            "properties": {
+              "level": { "$ref": "#/components/Level" },
+              "progress": {
+                "oneOf": [
+                  { "$ref": "#/components/UserProgressSnapshot" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "errors": ["400", "403", "404"]
+    },
+
+    "submitScore": {
+      "method": "POST",
+      "path": "/submitScore",
+      "description": "Submit a completed puzzle. The server validates answers via hash, computes the score, updates the leaderboard, marks progress complete, updates streak, and awards coins. The client MUST NOT rely on client-side score values — only the server-returned score is authoritative.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "Guest users cannot submit to the leaderboard. They must create an account first and call mergeGuestProgress."
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["level_id", "answers", "time_spent", "hints_used", "mistakes"],
+          "properties": {
+            "level_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "answers": {
+              "type": "object",
+              "description": "Map of clue key → answer string. Key format: '<number><direction>' e.g. '1A', '3D'.",
+              "additionalProperties": { "type": "string" },
+              "maxProperties": 200
+            },
+            "time_spent": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Total seconds from puzzle start to completion."
+            },
+            "hints_used": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20
+            },
+            "mistakes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 500
+            }
+          }
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["score", "rank", "is_new_best"],
+            "properties": {
+              "score": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Server-computed final score."
+              },
+              "rank": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "User's rank on this level's leaderboard after this submission."
+              },
+              "is_new_best": {
+                "type": "boolean",
+                "description": "True if this score beat the user's previous best for this level."
+              }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "404", "422", "500"]
+    },
+
+    "mergeGuestProgress": {
+      "method": "POST",
+      "path": "/mergeGuestProgress",
+      "description": "Migrate progress rows from a guest_id to the authenticated user. Call this immediately after the user signs up or logs in. Conflict resolution: completed beats in-progress; later updated_at wins when both are equal status.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer"
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["guest_id"],
+          "properties": {
+            "guest_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The guest UUID previously stored on device."
+            }
+          }
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["merged_count", "skipped_count"],
+            "properties": {
+              "merged_count": {
+                "type": "integer",
+                "description": "Number of guest progress rows successfully merged into the user account."
+              },
+              "skipped_count": {
+                "type": "integer",
+                "description": "Number of guest rows discarded because the user's existing entry was better."
+              }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "500"]
+    }
+
+  },
+
+  "changeRequests": {
+
+    "_protocol": "Frontend agent appends CRs here when it detects a gap. Backend agent reviews, resolves (implements or rejects), and removes the entry. CRs never modify existing schema keys.",
+
+    "CR-001": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "Level response missing display metadata",
+      "description": "The components.Level shape does not include: title (string), publishedAt (date-time), coinReward (integer), maxScore (integer). The frontend needs at least a display title and coin reward per level. Currently using derived defaults (difficulty label + hardcoded coin map). Request: add optional fields to components.Level.",
+      "proposedAddition": {
+        "title": { "type": "string", "description": "Human-readable level name." },
+        "published_at": { "type": "string", "format": "date-time" },
+        "coin_reward": { "type": "integer", "minimum": 0, "description": "Coins awarded on completion." },
+        "max_score": { "type": "integer", "minimum": 0 }
+      },
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/components/Level", "frontend: src/api/adapters/levelAdapter.ts"]
+    },
+
+    "CR-002": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "Client-side answer validation impossible — answers never sent",
+      "description": "level.schema.json#/notes/serverOnly explicitly states answers are never returned. This makes it impossible to (a) highlight wrong letters in real-time, (b) detect per-cell mistakes client-side, or (c) support offline validation. Current behaviour: wrong-cell highlighting disabled (falls back to empty set), mistake counting disabled. Request: provide a mechanism for client-side validation. Options — (A) encrypted/hashed answer per cell, (B) new POST /checkAnswer endpoint, (C) answer included only after level completion via submitScore response.",
+      "proposedOption": "C — include answers in the submitScore 200 response so offline replays can re-highlight, without leaking answers before completion.",
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/endpoints/submitScore/response/200", "frontend: src/domain/crossword/logic.ts"]
+    },
+
+    "CR-003": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "getDailyChallenge endpoint needed (Phase 2 backlog #13)",
+      "description": "The daily puzzle feature is blocked. status.backend.md lists getDailyChallenge as Phase 2 #13. Frontend has a placeholder hook at /getDailyChallenge that returns 404 until deployed. Request: define and implement the endpoint. Proposed contract below.",
+      "proposedEndpoint": {
+        "method": "GET",
+        "path": "/getDailyChallenge",
+        "description": "Returns today's daily challenge level and the caller's progress for it.",
+        "auth": { "required": false, "notes": "Same as getLevel." },
+        "response": {
+          "200": {
+            "schema": {
+              "type": "object",
+              "required": ["level", "date"],
+              "properties": {
+                "level": { "$ref": "#/components/Level" },
+                "date": { "type": "string", "format": "date" },
+                "leaderboard_enabled": { "type": "boolean" },
+                "progress": { "oneOf": [{ "$ref": "#/components/UserProgressSnapshot" }, { "type": "null" }] }
+              }
+            }
+          }
+        },
+        "errors": ["403", "404"]
+      },
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/endpoints", "frontend: src/api/hooks/useLevels.ts"]
+    },
+
+    "CR-004": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "saveProgress endpoint needed for crash-safe mid-game sync (Phase 2 backlog #14)",
+      "description": "status.backend.md lists this as a known risk: 'in-flight state loss on crash'. Currently the frontend only saves to AsyncStorage. If a user plays on two devices or re-installs, their mid-game progress is lost. Request: implement POST /saveProgress.",
+      "proposedEndpoint": {
+        "method": "POST",
+        "path": "/saveProgress",
+        "description": "Upserts in-progress game state for a level. Not called on completion — use submitScore instead.",
+        "auth": { "required": false, "notes": "Guests pass x-guest-id." },
+        "requestBody": {
+          "schema": {
+            "type": "object",
+            "required": ["level_id", "state_json", "time_spent", "hints_used", "mistakes"],
+            "properties": {
+              "level_id": { "type": "string", "format": "uuid" },
+              "state_json": { "type": "object", "description": "Opaque client state (FilledCells map)." },
+              "time_spent": { "type": "integer", "minimum": 0 },
+              "hints_used": { "type": "integer", "minimum": 0 },
+              "mistakes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "response": {
+          "200": { "schema": { "type": "object", "required": ["saved"], "properties": { "saved": { "type": "boolean" } } } }
+        },
+        "errors": ["400", "401"]
+      },
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/endpoints", "frontend: src/hooks/useAutoSave.ts"]
+    },
+
+    "CR-005": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "getLeaderboard endpoint needed (Phase 2 backlog #12)",
+      "description": "Leaderboard screen is a placeholder. Backend has the DB table and RPC functions but no Edge Function yet. Request: define and implement GET /getLeaderboard.",
+      "proposedEndpoint": {
+        "method": "GET",
+        "path": "/getLeaderboard",
+        "queryParams": {
+          "level_id": { "type": "string", "format": "uuid", "required": false },
+          "date": { "type": "string", "format": "date", "required": false, "description": "YYYY-MM-DD for daily leaderboard. Mutually exclusive with level_id." },
+          "limit": { "type": "integer", "default": 50 },
+          "offset": { "type": "integer", "default": 0 }
+        },
+        "response": {
+          "200": {
+            "schema": {
+              "type": "object",
+              "required": ["entries", "total", "current_user_rank"],
+              "properties": {
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["rank", "user_id", "username", "score", "completion_time"],
+                    "properties": {
+                      "rank": { "type": "integer" },
+                      "user_id": { "type": "string" },
+                      "username": { "type": "string" },
+                      "avatar_url": { "type": ["string", "null"] },
+                      "score": { "type": "integer" },
+                      "completion_time": { "type": "integer" },
+                      "hints_used": { "type": "integer" },
+                      "is_current_user": { "type": "boolean" }
+                    }
+                  }
+                },
+                "total": { "type": "integer" },
+                "current_user_rank": { "type": ["integer", "null"] }
+              }
+            }
+          }
+        },
+        "errors": ["400", "404"]
+      },
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/endpoints", "frontend: src/api/hooks/useLeaderboard.ts"]
+    },
+
+    "CR-006": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "getProfile endpoint needed",
+      "description": "No profile endpoint exists in the current contract. The frontend profile screen and coin balance display have no way to fetch server-side data (coins, total score, rank). Request: define GET /getProfile.",
+      "proposedEndpoint": {
+        "method": "GET",
+        "path": "/getProfile",
+        "auth": { "required": true, "scheme": "bearer" },
+        "response": {
+          "200": {
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "username", "coins", "total_score", "levels_completed", "is_premium", "streak"],
+              "properties": {
+                "user_id": { "type": "string" },
+                "username": { "type": "string" },
+                "avatar_url": { "type": ["string", "null"] },
+                "coins": { "type": "integer" },
+                "total_score": { "type": "integer" },
+                "levels_completed": { "type": "integer" },
+                "is_premium": { "type": "boolean" },
+                "rank": { "type": ["integer", "null"] },
+                "streak": {
+                  "type": "object",
+                  "required": ["current_streak", "longest_streak", "last_completed_date"],
+                  "properties": {
+                    "current_streak": { "type": "integer" },
+                    "longest_streak": { "type": "integer" },
+                    "last_completed_date": { "type": ["string", "null"], "format": "date" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "errors": ["401", "404"]
+      },
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/endpoints", "frontend: src/api/hooks/useProfile.ts"]
+    },
+
+    "CR-007": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "hint_type mismatch: frontend uses 'clear_wrong', contract uses 'check_letter'",
+      "description": "events.contract.md defines hint_type enum as: reveal_letter | reveal_word | check_letter. The frontend domain types define HintType as: reveal_letter | reveal_word | clear_wrong. These are semantically different: 'clear_wrong' removes all wrong letters from the board, while 'check_letter' verifies a single letter. Request: either (A) add 'clear_wrong' to the events contract enum, or (B) map 'clear_wrong' to 'check_letter' in the analytics layer. Frontend currently sends 'clear_wrong' as a non-contracted value.",
+      "proposedResolution": "Add 'clear_wrong' to events.contract.md hint_type enum as a patch bump.",
+      "breakingChange": false,
+      "affectedFiles": ["CONTRACTS/events.contract.md#hint_used", "frontend: src/lib/analytics.ts", "frontend: src/domain/crossword/types.ts"]
+    },
+
+    "CR-008": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-21",
+      "title": "difficulty enum missing 'expert' tier",
+      "description": "The frontend CLAUDE.md contract mentions difficulty tiers but the backend schema defines only easy | medium | hard. Frontend has been updated to remove 'expert'. If a harder difficulty tier is planned, both level.schema.json and api.contract.json#/components/Level must add it simultaneously.",
+      "proposedResolution": "Agree on final difficulty set before Phase 2 level upload. If 'expert' is needed, add to both contracts as a patch bump.",
+      "breakingChange": false,
+      "affectedFiles": ["level.schema.json#/definitions/GridCell", "api.contract.json#/components/Level/properties/difficulty", "frontend: src/domain/crossword/types.ts"]
+    }
+
+  },
+
+  "components": {
+
+    "Level": {
+      "type": "object",
+      "required": ["id", "version", "difficulty", "is_premium", "grid_json", "clues_json"],
+      "properties": {
+        "id":          { "type": "string", "format": "uuid" },
+        "version":     { "type": "integer", "minimum": 1 },
+        "difficulty":  { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "is_premium":  { "type": "boolean" },
+        "grid_json":   { "$ref": "level.schema.json#/definitions/GridJson" },
+        "clues_json":  { "$ref": "level.schema.json#/definitions/CluesJson" }
+      }
+    },
+
+    "UserProgressSnapshot": {
+      "type": "object",
+      "description": "The caller's saved progress for a level. state_json content is opaque to the backend — the client owns its format.",
+      "required": ["state_json", "time_spent", "hints_used", "mistakes"],
+      "properties": {
+        "state_json":   {
+          "type": "object",
+          "description": "Opaque client-owned state. Backend stores and returns verbatim."
+        },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "time_spent":   { "type": "integer", "minimum": 0 },
+        "hints_used":   { "type": "integer", "minimum": 0 },
+        "mistakes":     { "type": "integer", "minimum": 0 }
+      }
+    }
+
+  }
+}

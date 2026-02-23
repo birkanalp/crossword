@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "level.schema.json",
+  "title": "Crossword Level Schema",
+  "description": "Canonical schema for grid_json and clues_json stored in the levels table and returned by getLevel.",
+  "contractVersion": "1.0.0",
+  "lastUpdated": "2026-02-21",
+  "owner": "backend-agent",
+  "consumers": ["frontend-agent"],
+
+  "_changelog": [
+    { "version": "1.0.0", "date": "2026-02-21", "note": "Phase 1 initial schema" }
+  ],
+
+  "definitions": {
+
+    "GridCell": {
+      "type": "object",
+      "required": ["row", "col", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0-indexed row position in the grid."
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0-indexed column position in the grid."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["letter", "black"],
+          "description": "'letter' = playable cell. 'black' = blocked cell (dark square)."
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Clue number shown in the top-left corner of the cell. Only present on the first cell of an Across or Down word."
+        }
+      }
+    },
+
+    "GridJson": {
+      "type": "object",
+      "required": ["rows", "cols", "cells"],
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 21,
+          "description": "Total number of rows in the grid."
+        },
+        "cols": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 21,
+          "description": "Total number of columns in the grid."
+        },
+        "cells": {
+          "type": "array",
+          "description": "Flat list of all cells. Every (row, col) position within [0, rows) × [0, cols) must appear exactly once.",
+          "items": { "$ref": "#/definitions/GridCell" },
+          "minItems": 9
+        }
+      }
+    },
+
+    "ClueStart": {
+      "type": "object",
+      "required": ["row", "col"],
+      "additionalProperties": false,
+      "properties": {
+        "row": { "type": "integer", "minimum": 0 },
+        "col": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "Clue": {
+      "type": "object",
+      "required": ["number", "clue", "answer_length", "start"],
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Clue number. Matches the 'number' field on the corresponding GridCell."
+        },
+        "clue": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable clue text shown to the player."
+        },
+        "answer_length": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of letters in the correct answer."
+        },
+        "start": {
+          "$ref": "#/definitions/ClueStart",
+          "description": "Grid position of the first letter of the answer."
+        }
+      }
+    },
+
+    "CluesJson": {
+      "type": "object",
+      "required": ["across", "down"],
+      "additionalProperties": false,
+      "properties": {
+        "across": {
+          "type": "array",
+          "description": "All Across clues, ordered by clue number ascending.",
+          "items": { "$ref": "#/definitions/Clue" },
+          "minItems": 1
+        },
+        "down": {
+          "type": "array",
+          "description": "All Down clues, ordered by clue number ascending.",
+          "items": { "$ref": "#/definitions/Clue" },
+          "minItems": 1
+        }
+      }
+    }
+
+  },
+
+  "notes": {
+    "answerKeys": {
+      "description": "When sending answers in submitScore, keys must be formatted as '<number><direction>' where direction is 'A' (Across) or 'D' (Down). Examples: '1A', '10D', '23A'.",
+      "examples": ["1A", "1D", "2A", "10D"]
+    },
+    "cellCoverage": "Every letter cell must belong to at least one Across and/or one Down clue. A cell that belongs to no clue is invalid.",
+    "symmetry": "Standard crossword grids use 180° rotational symmetry for black cells, but this is not enforced by this schema.",
+    "serverOnly": "The correct answer strings are NEVER included in getLevel responses. Only clue text and answer_length are returned. The client must infer word positions from grid_json."
+  }
+}

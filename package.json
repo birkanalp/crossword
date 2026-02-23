@@ -1,0 +1,28 @@
+{
+  "name": "bulmaca",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Crossword puzzle game – monorepo root",
+  "scripts": {
+    "install:all": "cd frontend && npm install",
+
+    "docker:up": "docker compose up -d --wait",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:reset": "docker compose down -v && docker compose up -d --wait",
+    "docker:ps": "docker compose ps",
+
+    "start": "npm run docker:up && cd frontend && npx expo start",
+    "start:ios": "npm run docker:up && cd frontend && npx expo start --ios",
+    "start:android": "npm run docker:up && cd frontend && npx expo start --android",
+
+    "studio": "open http://localhost:54323",
+    "inbucket": "open http://localhost:54324",
+
+    "db:reset": "docker compose rm -fsv db && docker volume rm bulmaca_db-data 2>/dev/null; docker compose up db -d --wait",
+    "db:migrate": "docker compose exec db psql -U postgres -d postgres -f /docker-entrypoint-initdb.d/run-migrations.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -39,8 +39,6 @@ services:
       - "${POSTGRES_PORT:-54322}:5432"
     environment:
       POSTGRES_HOST: /var/run/postgresql
-      PGPORT: ${POSTGRES_PORT:-54322}
-      POSTGRES_PORT: ${POSTGRES_PORT:-54322}
       PGPASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}
       PGDATABASE: ${POSTGRES_DB:-postgres}
@@ -49,6 +47,9 @@ services:
       JWT_EXP: ${JWT_EXPIRY:-3600}
     volumes:
       - db-data:/var/lib/postgresql/data
+      # post_setup.sql is run by migrate.sh AFTER all Supabase roles exist —
+      # this is the correct hook for setting internal service-account passwords.
+      - ./backend/supabase/init/post_setup.sql:/etc/postgresql.schema.sql:ro
       - ./backend/supabase/migrations:/docker-entrypoint-initdb.d/migrations:ro
 
   # ── Auth (GoTrue) ───────────────────────────────────────────────────────────
@@ -206,7 +207,7 @@ services:
       PG_META_DB_HOST: db
       PG_META_DB_PORT: 5432
       PG_META_DB_NAME: ${POSTGRES_DB:-postgres}
-      PG_META_DB_USER: supabase
+      PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}
 
   # ── Supabase Studio ──────────────────────────────────────────────────────────

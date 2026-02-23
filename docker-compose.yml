@@ -216,13 +216,15 @@ services:
       meta:
         condition: service_started
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/profile', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      # Simple TCP check — avoids upstream API calls that can timeout
+      test: ["CMD", "bash", "-c", "printf '\\0' > /dev/tcp/127.0.0.1/3000"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
     ports:
       - "${STUDIO_PORT:-54323}:3000"
     environment:
+      HOSTNAME: "0.0.0.0"
       STUDIO_PG_META_URL: http://meta:8080
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}
       DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION:-Bulmaca}

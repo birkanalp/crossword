@@ -1,6 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import Svg from 'react-native-svg';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { GridCell } from './GridCell';
 import type { CrosswordGridProps, GridCellRenderState } from './types';
 import { APP_CONFIG } from '@/constants/config';
@@ -17,21 +18,23 @@ function CrosswordGridComponent({
   cellStates,
   onCellPress,
   availableWidth,
+  availableHeight,
+  animatedStyle,
 }: CrosswordGridProps) {
   const cellSize = useMemo(() => {
-    const raw = Math.floor(availableWidth / cols);
+    // Fit horizontally
+    const byWidth = Math.floor(availableWidth / cols);
+    // Fit vertically if a height constraint is provided
+    const byHeight = availableHeight != null ? Math.floor(availableHeight / rows) : byWidth;
+    const raw = Math.min(byWidth, byHeight);
     return Math.min(Math.max(raw, APP_CONFIG.MIN_CELL_SIZE), APP_CONFIG.MAX_CELL_SIZE);
-  }, [availableWidth, cols]);
+  }, [availableWidth, availableHeight, cols, rows]);
 
   const svgWidth = cellSize * cols;
   const svgHeight = cellSize * rows;
 
-  const handleCellPress = (position: GridPosition) => {
-    onCellPress(position);
-  };
-
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, animatedStyle]}>
       <Svg width={svgWidth} height={svgHeight}>
         {cellStates.map((rowCells) =>
           rowCells.map((cell) => {
@@ -44,13 +47,13 @@ function CrosswordGridComponent({
                 cellSize={cellSize}
                 x={x}
                 y={y}
-                onPress={handleCellPress}
+                onPress={onCellPress}
               />
             );
           }),
         )}
       </Svg>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -77,8 +80,9 @@ export function buildCellStates(
   selectedCell: GridPosition | null,
   selectedClue: Clue | null,
   wrongCells: Set<string>,
+  flashCells: Set<string> = new Set(),
+  flashType: 'correct' | 'wrong' | 'idle' = 'idle',
 ): GridCellRenderState[][] {
-  // Pre-compute highlighted cells for the selected clue
   const highlightedKeys = new Set<string>();
   if (selectedClue) {
     for (const pos of getCellsForClue(selectedClue)) {
@@ -91,6 +95,7 @@ export function buildCellStates(
   return level.grid.map((row) =>
     row.map((cell) => {
       const key = cellKey(cell.row, cell.col);
+      const isFlashing = flashCells.has(key);
       return {
         row: cell.row,
         col: cell.col,
@@ -100,7 +105,9 @@ export function buildCellStates(
         isSelected: key === selectedKey,
         isHighlighted: highlightedKeys.has(key) && key !== selectedKey,
         isWrong: wrongCells.has(key),
-        isCorrectWord: false, // TODO: set after word-correct animation
+        isCorrectWord: false,
+        isFlashCorrect: isFlashing && flashType === 'correct',
+        isFlashWrong: isFlashing && flashType === 'wrong',
       };
     }),
   );

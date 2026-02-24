@@ -34,6 +34,8 @@ export interface Clue {
    * All game logic MUST guard: `if (clue.answer) { ... }`
    */
   answer?: string;
+  /** Optional extra hint text for the clue (used by "İpucu" feature) */
+  hint?: string;
 }
 
 export interface CrosswordLevel {

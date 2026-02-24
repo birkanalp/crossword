@@ -23,7 +23,7 @@ export const OFFERINGS = {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 export async function initRevenueCat(userId: string): Promise<void> {
-  if (!API_KEY) {
+  if (!API_KEY || API_KEY.startsWith('YOUR_')) {
     console.warn('[RevenueCat] No API key configured — skipping init.');
     return;
   }

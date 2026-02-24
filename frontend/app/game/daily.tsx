@@ -18,11 +18,11 @@ export default function DailyScreen() {
 
   // Once the daily is loaded, navigate into it as a regular level
   useEffect(() => {
-    if (daily?.id) {
+    if (daily?.level?.id) {
       // Replace so pressing back from the level goes to home, not this bridge
-      router.replace(`/game/level/${daily.id}`);
+      router.replace(`/game/level/${daily.level.id}`);
     }
-  }, [daily?.id, router]);
+  }, [daily?.level?.id, router]);
 
   if (isLoading) {
     return (

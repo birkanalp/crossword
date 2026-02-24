@@ -8,6 +8,25 @@ import {
   type GetLevelResponse,
 } from '../adapters/levelAdapter';
 
+// ─── checkWord ────────────────────────────────────────────────────────────────
+
+export async function checkWord(
+  levelId: string,
+  clueNumber: number,
+  direction: 'across' | 'down',
+  word: string,
+  opts?: { guestId?: string; authToken?: string },
+): Promise<boolean> {
+  const response = await apiRequest<{ correct: boolean }>('/checkWord', {
+    method: 'POST',
+    body: { level_id: levelId, clue_number: clueNumber, direction, word },
+    guestId: opts?.guestId,
+    authToken: opts?.authToken,
+  });
+  if (response.error) return false;
+  return response.data.correct;
+}
+
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const levelKeys = {

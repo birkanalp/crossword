@@ -8,23 +8,23 @@ export const APP_CONFIG = {
   LEVELS_PAGE_SIZE: 20,
 
   /** Min grid cell size in dp */
-  MIN_CELL_SIZE: 30,
+  MIN_CELL_SIZE: 24,
 
   /** Max grid cell size in dp */
-  MAX_CELL_SIZE: 52,
+  MAX_CELL_SIZE: 44,
 
   /** Fraction of screen width the grid can occupy */
-  GRID_WIDTH_FRACTION: 0.92,
+  GRID_WIDTH_FRACTION: 0.97,
 
   /** Cell number font size relative to cell size */
-  CELL_NUMBER_SIZE_RATIO: 0.28,
+  CELL_NUMBER_SIZE_RATIO: 0.26,
 
   /** Cell letter font size relative to cell size */
   CELL_LETTER_SIZE_RATIO: 0.5,
 
-  /** Border radius for cells */
-  CELL_BORDER_RADIUS: 3,
+  /** Border radius for cells — 0 for sharp classic crossword look */
+  CELL_BORDER_RADIUS: 0,
 
   /** Border width for grid cells */
-  CELL_BORDER_WIDTH: 1,
+  CELL_BORDER_WIDTH: 0.8,
 } as const;

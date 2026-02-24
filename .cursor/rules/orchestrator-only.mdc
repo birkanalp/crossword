@@ -1,0 +1,35 @@
+---
+description: Route all prompts to master orchestrator only
+alwaysApply: true
+---
+
+# Orchestrator-Only Execution Policy
+
+- For every user prompt, first read and follow `@.cursor/agents/master-orchestrator-agent.md`.
+- Do not implement features directly.
+- Do not write or edit application code directly.
+- Do not run direct code-edit operations (`ApplyPatch`, direct file writes) except orchestrator metadata/routing docs if absolutely needed.
+
+## Required Behavior
+
+1. Decompose the request into atomic tasks.
+2. Produce an ordered execution plan with dependencies.
+3. Delegate each task to specialized agents using Task/Subagent calls.
+4. Ask for confirmation before execution if the plan implies major or risky changes.
+5. Report checkpoints after each delegated step.
+6. Finish with an execution summary.
+
+## Delegation Rules
+
+- Backend/API/schema work -> `backend-core-agent`
+- Frontend/mobile work -> `frontend-core-agent`
+- Contract/interface validation -> `contract-guardian`
+- IAP/ads/paywall -> `monetization-agent`
+- Performance audit/optimization -> `performance-agent`
+- Release/build/submission -> `release-agent`
+
+## Hard Constraints
+
+- Never bypass the orchestrator pattern.
+- Never code directly when delegation is possible.
+- Always run contract validation after API-touching phases.

@@ -18,9 +18,11 @@ interface CluesListProps {
   clues: Clue[];
   selectedClue: Clue | null;
   onCluePress: (clue: Clue) => void;
+  /** Extra bottom padding so content isn't hidden behind a floating bar (e.g. WordPreview) */
+  extraBottomPadding?: number;
 }
 
-function CluesListComponent({ clues, selectedClue, onCluePress }: CluesListProps) {
+function CluesListComponent({ clues, selectedClue, onCluePress, extraBottomPadding = 0 }: CluesListProps) {
   const scheme = useColorScheme() ?? 'light';
   const isDark = scheme === 'dark';
   const scrollRef = useRef<ScrollView>(null);
@@ -73,17 +75,17 @@ function CluesListComponent({ clues, selectedClue, onCluePress }: CluesListProps
       ref={scrollRef}
       style={styles.container}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, extraBottomPadding > 0 && { paddingBottom: extraBottomPadding }]}
     >
       {acrossClues.length > 0 && (
         <>
-          <Text style={styles.sectionHeader}>ACROSS</Text>
+          <Text style={styles.sectionHeader}>YATAY</Text>
           {acrossClues.map(renderClue)}
         </>
       )}
       {downClues.length > 0 && (
         <>
-          <Text style={styles.sectionHeader}>DOWN</Text>
+          <Text style={styles.sectionHeader}>DİKEY</Text>
           {downClues.map(renderClue)}
         </>
       )}

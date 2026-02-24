@@ -3,6 +3,7 @@
     "name": "Bulmaca",
     "slug": "bulmaca",
     "version": "1.0.0",
+    "scheme": "bulmaca",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,7 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#1a1a2e"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bulmaca.app",
@@ -23,8 +26,7 @@
         "backgroundColor": "#1a1a2e"
       },
       "package": "com.bulmaca.app",
-      "versionCode": 1,
-      "googleServicesFile": "./google-services.json"
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -50,6 +52,7 @@
         }
       ]
     ],
+    "newArchEnabled": true,
     "experiments": {
       "typedRoutes": true
     },
@@ -60,7 +63,7 @@
       "eas": {
         "projectId": "YOUR_EAS_PROJECT_ID"
       },
-      "supabaseUrl": "YOUR_SUPABASE_URL",
+      "supabaseUrl": "http://localhost:54321",
       "sentryDsn": "YOUR_SENTRY_DSN",
       "revenueCatApiKeyIos": "YOUR_REVENUECAT_IOS_KEY",
       "revenueCatApiKeyAndroid": "YOUR_REVENUECAT_ANDROID_KEY",

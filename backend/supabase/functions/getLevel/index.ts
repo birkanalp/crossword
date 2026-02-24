@@ -69,14 +69,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
-  // ── Build response (NEVER include answer_hash) ─────────────────────────────
+  // ── Build response (NEVER include answer_hash or per-clue answers) ──────────
+  // Strip the server-only "answer" field from every clue before sending.
+  const stripAnswers = (clues: Record<string, unknown>[]) =>
+    clues.map(({ answer: _a, ...rest }) => rest);
+
+  const sanitizedCluesJson = {
+    across: stripAnswers((level.clues_json as { across: Record<string, unknown>[] }).across ?? []),
+    down: stripAnswers((level.clues_json as { down: Record<string, unknown>[] }).down ?? []),
+  };
+
   const payload: LevelPayload = {
     id: level.id,
     version: level.version,
     difficulty: level.difficulty,
     is_premium: level.is_premium,
     grid_json: level.grid_json,
-    clues_json: level.clues_json,
+    clues_json: sanitizedCluesJson,
   };
 
   // ── Attach caller's progress (if any) ─────────────────────────────────────

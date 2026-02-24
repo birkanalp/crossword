@@ -17,7 +17,7 @@ export type AnalyticsEvent =
 
   // Hints — contract: hint_type enum is reveal_letter | reveal_word | check_letter
   // NOTE: Frontend uses 'clear_wrong' which is not in the contract — CR-007
-  | { name: 'hint_used'; level_id: string; hint_type: 'reveal_letter' | 'reveal_word' | 'check_letter' | 'clear_wrong'; clue_key?: string }
+  | { name: 'hint_used'; level_id: string; hint_type: 'reveal_letter' | 'reveal_word' | 'check_letter' | 'clear_wrong' | 'show_hint'; clue_key?: string }
 
   // Auth
   | { name: 'signup_completed'; method: 'email' | 'apple' | 'google' | 'anonymous'; had_guest_progress: boolean }

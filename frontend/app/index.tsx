@@ -98,10 +98,10 @@ export default function HomeScreen() {
         onPress={navigateToLevels}
         activeOpacity={0.85}
       >
-        <Text style={styles.cardLabel}>SEVIYELER</Text>
-        <Text style={styles.cardTitle}>Kolaydan zora tüm bulmacalar</Text>
+        <Text style={styles.levelCardLabel}>SEVIYELER</Text>
+        <Text style={styles.levelCardTitle}>Kolaydan zora tüm bulmacalar</Text>
         <View style={styles.cardCta}>
-          <Text style={styles.cardCtaText}>Keşfet →</Text>
+          <Text style={styles.levelCardCtaText}>Keşfet →</Text>
         </View>
       </TouchableOpacity>
 
@@ -223,6 +223,22 @@ function makeStyles(isDark: boolean) {
       fontSize: 14,
       fontWeight: '600',
       color: 'rgba(255,255,255,0.9)',
+    },
+    levelCardLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 1,
+      color: sub,
+    },
+    levelCardTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: text,
+    },
+    levelCardCtaText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: Colors.primary,
     },
     quickActions: {
       flexDirection: 'row',

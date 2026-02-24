@@ -8,7 +8,7 @@ const DSN: string =
   (Constants.expoConfig?.extra?.sentryDsn as string | undefined) ?? '';
 
 export function initSentry(): void {
-  if (!DSN) {
+  if (!DSN || !DSN.startsWith('https://')) {
     console.warn('[Sentry] No DSN configured — skipping init.');
     return;
   }

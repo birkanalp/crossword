@@ -13,21 +13,18 @@ function GridCellComponent({ state, cellSize, x, y, onPress }: GridCellProps) {
   const scheme = useColorScheme() ?? 'light';
   const isDark = scheme === 'dark';
 
+  // Blocked cells are completely invisible — classic crossword look (empty space, no fill)
   if (state.isBlocked) {
-    return (
-      <Rect
-        x={x}
-        y={y}
-        width={cellSize}
-        height={cellSize}
-        fill={isDark ? Colors.cellBlockedDark : Colors.cellBlocked}
-      />
-    );
+    return null;
   }
 
-  // ─── Background colour by state ─────────────────────────────────────────────
+  // ─── Fill colour by state (priority order) ─────────────────────────────────
   let fill: string;
-  if (state.isSelected) {
+  if (state.isFlashCorrect) {
+    fill = Colors.cellCorrect;
+  } else if (state.isFlashWrong) {
+    fill = Colors.cellWrong;
+  } else if (state.isSelected) {
     fill = isDark ? Colors.cellSelectedDark : Colors.cellSelected;
   } else if (state.isWrong) {
     fill = Colors.cellWrong;
@@ -47,14 +44,11 @@ function GridCellComponent({ state, cellSize, x, y, onPress }: GridCellProps) {
   const letterFontSize = Math.floor(cellSize * APP_CONFIG.CELL_LETTER_SIZE_RATIO);
 
   const handlePress = () => {
-    if (!state.isBlocked) {
-      onPress({ row: state.row, col: state.col });
-    }
+    onPress({ row: state.row, col: state.col });
   };
 
   return (
     <G onPress={handlePress}>
-      {/* Cell background */}
       <Rect
         x={x}
         y={y}
@@ -67,7 +61,6 @@ function GridCellComponent({ state, cellSize, x, y, onPress }: GridCellProps) {
         ry={APP_CONFIG.CELL_BORDER_RADIUS}
       />
 
-      {/* Cell number (top-left) */}
       {state.cellNumber !== null && (
         <Text
           x={x + 2}
@@ -80,7 +73,6 @@ function GridCellComponent({ state, cellSize, x, y, onPress }: GridCellProps) {
         </Text>
       )}
 
-      {/* Filled letter (centred) */}
       {state.letter.length > 0 && (
         <Text
           x={x + cellSize / 2}

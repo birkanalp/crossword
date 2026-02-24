@@ -56,8 +56,26 @@ interface GameActions {
   /** Delete the letter in the selected cell (backspace) */
   deleteLetter: () => void;
 
+  /**
+   * Clear the given clue's grid cells (called on wrong answer).
+   * Respects cells shared with other committed clues.
+   */
+  clearCluePreview: (clue: Clue) => void;
+
+  /**
+   * Write an array of letters into the given clue's cells all at once.
+   * Marks the clue as correctly answered in correctClueIds.
+   */
+  commitWord: (clue: Clue, letters: string[]) => boolean;
+
   /** Directly select a clue from the clue list */
   selectClue: (clue: Clue) => void;
+
+  /**
+   * Move selection to the next clue that hasn't been correctly answered yet.
+   * Order: across clues by number, then down clues by number.
+   */
+  advanceToNextClue: () => void;
 
   /** Apply a "reveal letter" hint to a specific cell */
   revealLetter: (row: number, col: number) => void;
@@ -225,12 +243,109 @@ export const useGameStore = create<GameState & GameActions>()(
       }
     },
 
+    clearCluePreview: (clue) => {
+      const { currentLevel, filledCells, correctClueIds } = get();
+      if (!currentLevel) return;
+
+      const cells = getCellsForClue(clue);
+      const newFilledCells = { ...filledCells };
+      const newWrongCells = new Set(get().wrongCells);
+      cells.forEach((pos) => {
+        const key = cellKey(pos.row, pos.col);
+        // Don't erase a cell already locked by another committed clue.
+        const lockedByOther = currentLevel.clues.some(
+          (c) =>
+            c.id !== clue.id &&
+            correctClueIds.has(c.id) &&
+            getCellsForClue(c).some((cp) => cp.row === pos.row && cp.col === pos.col),
+        );
+        if (!lockedByOther) {
+          newFilledCells[key] = '';
+          newWrongCells.delete(key);
+        }
+      });
+      set({ filledCells: newFilledCells, wrongCells: newWrongCells });
+    },
+
+    commitWord: (clue, letters) => {
+      const { currentLevel, filledCells } = get();
+      if (!currentLevel) return false;
+
+      const cells = getCellsForClue(clue);
+      const newFilledCells = { ...filledCells };
+      const newWrongCells = new Set(get().wrongCells);
+      let hasMistake = false;
+
+      cells.forEach((pos, index) => {
+        const letter = letters[index];
+        if (!letter) return;
+        const key = cellKey(pos.row, pos.col);
+        const upperLetter = letter.toUpperCase();
+        newFilledCells[key] = upperLetter;
+
+        const correctLetter = clue.answer?.[index]?.toUpperCase();
+        if (correctLetter !== undefined && upperLetter !== correctLetter) {
+          newWrongCells.add(key);
+          hasMistake = true;
+        } else {
+          newWrongCells.delete(key);
+        }
+      });
+
+      const isCompleted = isPuzzleComplete(currentLevel, newFilledCells);
+      const scoreBreakdown = isCompleted
+        ? calculateScore(get().elapsedTime, get().hintsUsed)
+        : null;
+
+      const newCorrectClueIds = new Set(get().correctClueIds);
+      newCorrectClueIds.add(clue.id);
+
+      set((state) => ({
+        filledCells: newFilledCells,
+        wrongCells: newWrongCells,
+        mistakes: hasMistake ? state.mistakes + 1 : state.mistakes,
+        correctClueIds: newCorrectClueIds,
+        isCompleted,
+        scoreBreakdown,
+        isTimerRunning: !isCompleted,
+      }));
+
+      return hasMistake;
+    },
+
     selectClue: (clue) => {
       set({
         selectedClue: clue,
         direction: clue.direction,
         selectedCell: { row: clue.startRow, col: clue.startCol },
       });
+    },
+
+    advanceToNextClue: () => {
+      const { currentLevel, selectedClue, correctClueIds } = get();
+      if (!currentLevel) return;
+
+      // Natural order: across sorted by number, then down sorted by number
+      const ordered = [
+        ...currentLevel.clues.filter((c) => c.direction === 'across').sort((a, b) => a.number - b.number),
+        ...currentLevel.clues.filter((c) => c.direction === 'down').sort((a, b) => a.number - b.number),
+      ];
+
+      const unanswered = ordered.filter((c) => !correctClueIds.has(c.id));
+      if (unanswered.length === 0) return; // puzzle complete
+
+      // Find the next unanswered clue after the current one
+      const currentIndex = ordered.findIndex((c) => c.id === selectedClue?.id);
+      const next =
+        unanswered.find((c) => ordered.indexOf(c) > currentIndex) ?? unanswered[0];
+
+      if (next) {
+        set({
+          selectedClue: next,
+          direction: next.direction,
+          selectedCell: { row: next.startRow, col: next.startCol },
+        });
+      }
     },
 
     revealLetter: (row, col) => {
@@ -243,7 +358,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const cells = getCellsForClue(clue);
         const idx = cells.findIndex((c) => c.row === row && c.col === col);
         if (idx !== -1) {
-          correctLetter = clue.answer[idx]?.toUpperCase() ?? null;
+          correctLetter = clue.answer?.[idx]?.toUpperCase() ?? null;
           break;
         }
       }
@@ -280,7 +395,7 @@ export const useGameStore = create<GameState & GameActions>()(
 
       cells.forEach((pos, index) => {
         const key = cellKey(pos.row, pos.col);
-        const letter = selectedClue.answer[index]?.toUpperCase() ?? '';
+        const letter = selectedClue.answer?.[index]?.toUpperCase() ?? '';
         newFilledCells[key] = letter;
         newWrongCells.delete(key);
       });
@@ -342,3 +457,4 @@ export const selectIsCompleted = (s: GameState & GameActions) => s.isCompleted;
 export const selectScoreBreakdown = (s: GameState & GameActions) => s.scoreBreakdown;
 export const selectHintsUsed = (s: GameState & GameActions) => s.hintsUsed;
 export const selectWrongCells = (s: GameState & GameActions) => s.wrongCells;
+export const selectCorrectClueIds = (s: GameState & GameActions) => s.correctClueIds;

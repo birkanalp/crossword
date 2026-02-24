@@ -18,44 +18,48 @@ export function useAppBoot(): { isReady: boolean } {
 
   useEffect(() => {
     async function boot() {
-      // 1. Restore settings first (theme, haptics, etc.)
-      const savedSettings = await loadSettings();
-      if (savedSettings) {
-        hydrateSettings(savedSettings as Parameters<typeof hydrateSettings>[0]);
-      } else {
-        hydrateSettings({});
+      try {
+        // 1. Restore settings first (theme, haptics, etc.)
+        const savedSettings = await loadSettings();
+        if (savedSettings) {
+          hydrateSettings(savedSettings as Parameters<typeof hydrateSettings>[0]);
+        } else {
+          hydrateSettings({});
+        }
+
+        // 2. Restore or create user
+        const savedUser = await loadUser();
+
+        if (savedUser) {
+          const savedProfile = await loadProfile();
+          const savedStreak = await loadStreak();
+          hydrateUser(
+            savedUser,
+            savedProfile,
+            savedStreak ?? {
+              currentStreak: 0,
+              longestStreak: 0,
+              lastClaimedDate: null,
+              isTodayClaimed: false,
+            },
+          );
+        } else {
+          // First launch — generate guest session
+          initGuest();
+        }
+
+        // 3. After user is resolved, bootstrap 3rd party SDKs
+        const user = useUserStore.getState().user ?? createGuestUser();
+        const userId = user.type === 'guest' ? user.guestId : user.id;
+
+        setUserContext(userId, user.type === 'guest');
+        initAnalytics(userId);
+        await initRevenueCat(userId);
+      } catch (err) {
+        console.error('[AppBoot] Boot sequence failed:', err);
+      } finally {
+        setIsReady(true);
       }
-
-      // 2. Restore or create user
-      const savedUser = await loadUser();
-
-      if (savedUser) {
-        const savedProfile = await loadProfile();
-        const savedStreak = await loadStreak();
-        hydrateUser(
-          savedUser,
-          savedProfile,
-          savedStreak ?? {
-            currentStreak: 0,
-            longestStreak: 0,
-            lastClaimedDate: null,
-            isTodayClaimed: false,
-          },
-        );
-      } else {
-        // First launch — generate guest session
-        initGuest();
-      }
-
-      // 3. After user is resolved, bootstrap 3rd party SDKs
-      const user = useUserStore.getState().user ?? createGuestUser();
-      const userId = user.type === 'guest' ? user.guestId : user.id;
-
-      setUserContext(userId, user.type === 'guest');
-      initAnalytics(userId);
-      await initRevenueCat(userId);
-
-      setIsReady(true);
     }
 
     void boot();

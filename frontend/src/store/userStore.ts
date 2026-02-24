@@ -64,7 +64,17 @@ export const useUserStore = create<UserState & UserActions>()(
 
     initGuest: () => {
       const guest = createGuestUser();
-      set({ user: guest, isHydrated: true });
+      const defaultProfile: UserProfile = {
+        userId: guest.guestId,
+        totalScore: 0,
+        levelsCompleted: 0,
+        coins: 10,
+        streak: 0,
+        lastActiveDate: new Date().toISOString().slice(0, 10),
+        isPremium: false,
+        rank: null,
+      };
+      set({ user: guest, profile: defaultProfile, isHydrated: true });
     },
 
     hydrateUser: (user, profile, streak) => {

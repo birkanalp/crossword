@@ -57,3 +57,4 @@ docker-data/
 .idea/
 *.swp
 *.swo
+.mcp.json

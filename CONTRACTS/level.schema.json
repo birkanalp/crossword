@@ -3,12 +3,15 @@
   "$id": "level.schema.json",
   "title": "Crossword Level Schema",
   "description": "Canonical schema for grid_json and clues_json stored in the levels table and returned by getLevel.",
-  "contractVersion": "1.0.0",
-  "lastUpdated": "2026-02-21",
+  "contractVersion": "1.0.3",
+  "lastUpdated": "2026-02-25",
   "owner": "backend-agent",
   "consumers": ["frontend-agent"],
 
   "_changelog": [
+    { "version": "1.0.3", "date": "2026-02-25", "note": "Contract sync: allow server-only Clue.answer in at-rest levels.clues_json while preserving public API behavior that strips answers." },
+    { "version": "1.0.2", "date": "2026-02-24", "note": "Aligned notes with Phase-0 placeholder semantics: clue coverage is required for approved gameplay levels, not placeholder draft outputs." },
+    { "version": "1.0.1", "date": "2026-02-24", "note": "Clarified clue-number mapping semantics for placeholder generator output." },
     { "version": "1.0.0", "date": "2026-02-21", "note": "Phase 1 initial schema" }
   ],
 
@@ -86,7 +89,7 @@
         "number": {
           "type": "integer",
           "minimum": 1,
-          "description": "Clue number. Matches the 'number' field on the corresponding GridCell."
+          "description": "Clue display number. Placeholder generator output may omit GridCell.number; use start coordinates as the authoritative clue anchor."
         },
         "clue": {
           "type": "string",
@@ -101,6 +104,11 @@
         "start": {
           "$ref": "#/definitions/ClueStart",
           "description": "Grid position of the first letter of the answer."
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Server-only at-rest answer string used by backend generation/scoring workflows. Never returned in public getLevel payloads."
         }
       }
     },
@@ -132,8 +140,9 @@
       "description": "When sending answers in submitScore, keys must be formatted as '<number><direction>' where direction is 'A' (Across) or 'D' (Down). Examples: '1A', '10D', '23A'.",
       "examples": ["1A", "1D", "2A", "10D"]
     },
-    "cellCoverage": "Every letter cell must belong to at least one Across and/or one Down clue. A cell that belongs to no clue is invalid.",
+    "cellCoverage": "For approved gameplay levels, every letter cell should belong to at least one Across and/or one Down clue. Phase-0 placeholder draft outputs may temporarily violate this before review/approval.",
+    "clueNumberMapping": "The placeholder Phase-0 generator guarantees valid clue.start anchors but does not guarantee a strict one-to-one mapping between clue number and GridCell.number labels.",
     "symmetry": "Standard crossword grids use 180° rotational symmetry for black cells, but this is not enforced by this schema.",
-    "serverOnly": "The correct answer strings are NEVER included in getLevel responses. Only clue text and answer_length are returned. The client must infer word positions from grid_json."
+    "serverOnly": "At rest, levels.clues_json clue entries may include server-only answer values. Public getLevel responses NEVER include answer strings; only clue text and answer_length are returned. The client must infer word positions from grid_json."
   }
 }

@@ -4,25 +4,37 @@
   "private": true,
   "description": "Crossword puzzle game – monorepo root",
   "scripts": {
-    "install:all": "cd frontend && npm install",
-
+    "install:all": "cd frontend && npm install && cd ../admin && npm install",
+    "admin:dev": "cd admin && npm run dev",
+    "admin:create-user": "tsx scripts/create-admin-user.ts",
+    "admin:add-user": "docker compose exec -T db psql -U postgres -d postgres -f - < backend/supabase/scripts/add_admin_user.sql",
+    "admin:seed-pending": "docker compose exec -T db psql -U postgres -d postgres -f - < backend/supabase/scripts/seed_pending_puzzle.sql",
     "docker:up": "docker compose up -d --wait",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:reset": "docker compose down -v && docker compose up -d --wait",
     "docker:ps": "docker compose ps",
-
     "start": "npm run docker:up && cd frontend && npx expo start",
     "start:ios": "npm run docker:up && cd frontend && npx expo start --ios",
     "start:android": "npm run docker:up && cd frontend && npx expo start --android",
-
     "studio": "open http://localhost:54323",
     "inbucket": "open http://localhost:54324",
-
     "db:reset": "docker compose rm -fsv db && docker volume rm bulmaca_db-data 2>/dev/null; docker compose up db -d --wait",
-    "db:migrate": "docker compose exec db psql -U postgres -d postgres -f /docker-entrypoint-initdb.d/run-migrations.sh"
+    "db:migrate": "docker compose exec db psql -U postgres -d postgres -f /docker-entrypoint-initdb.d/run-migrations.sh",
+    "extract:tr:wiki": "tsx scripts/tr/extract-trwiki-text.ts",
+    "build:tr:freq": "tsx scripts/tr/build-tr-frequency.ts",
+    "import:tr:words": "tsx scripts/tr/import-tr-words.ts",
+    "tr:ingest": "tsx scripts/tr/ingest-sources.ts",
+    "tr:apply:freq": "tsx scripts/tr/apply-frequency.ts",
+    "generate:crossword": "tsx scripts/tr/generate-crossword.ts",
+    "generate:one": "docker compose exec db psql -U postgres -d postgres -c \"select * from run_generation_job_once('tr');\""
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@supabase/supabase-js": "^2.45.0",
+    "concurrently": "^9.1.2",
+    "dotenv": "^16.4.5",
+    "csv-parse": "^5.6.0",
+    "pg": "^8.18.0",
+    "tsx": "^4.21.0"
   }
 }

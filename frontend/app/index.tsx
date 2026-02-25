@@ -34,8 +34,7 @@ export default function HomeScreen() {
   };
 
   const navigateToLevels = () => {
-    // TODO: Navigate to level browser
-    router.push('/game/level/1');
+    router.push('/game/levels');
   };
 
   const navigateToLeaderboard = () => {

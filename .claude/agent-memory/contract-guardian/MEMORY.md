@@ -1,0 +1,17 @@
+## Stable Contract Drift Patterns
+
+- `CONTRACTS/api.contract.json` may lag backend runtime enums; verify `components.Level.difficulty` against backend `Difficulty` union in `backend/supabase/functions/_shared/types.ts`.
+- Frontend contract-facing difficulty unions can lag both contract and backend enum bumps; always cross-check `frontend/src/api/adapters/levelAdapter.ts` and `frontend/src/domain/crossword/types.ts` against `api.contract.json#/components/Level/properties/difficulty`.
+- Phase-0 generation introduces review workflow expectations: generator inserts `pending` only; player reads must remain approved-only; admin review policies rely on JWT `app_metadata.role = admin`.
+- `CONTRACTS/db.schema.sql` is a client-facing surface and may intentionally omit internal fields, but Phase-0 table timestamp/id columns can still drift from migrations and should be called out as warnings.
+- `CONTRACTS/status.backend.md` frequently drifts in the "File Map" contract version labels even when top-level `contractVersion` is updated; always cross-check both.
+- Frontend boundary drift currently centers on `GET /getProfile`: API call exists in `frontend/src/api/hooks/useProfile.ts` without a matching contract endpoint or backend function implementation.
+- In Phase-0 generation audits, check for enum type drift where `CONTRACTS/db.schema.sql` uses `TEXT` while migration columns are enum-backed (`difficulty_level`, `level_review_status`, `word_direction`).
+- Review workflow policy names can overstate enforcement; verify admin review-update policies are field-scoped, not just role-scoped on whole-row updates.
+- Phase-0 scoped validation reaches PASS when enum-backed Phase-0 columns are type-aligned in `CONTRACTS/db.schema.sql` and migration `004`, and admin review updates are constrained through `fn_levels_admin_review_update_only(levels)` in policy `WITH CHECK`.
+- Phase-0.5 TR audits must cross-check three "default language" layers together: migration defaults (e.g., `generation_jobs.language DEFAULT 'tr'`), function fallback behavior (`run_generation_job_once` null-language path), and docs (`PUZZLE_GENERATION_SPEC.md`, `CONTRACTS/status.backend.md`) because these drift independently.
+- `CONTRACTS/status.backend.md` can be partially stale within the same edit (e.g., updated file map but outdated "migration file count" milestone text); verify both sections before declaring status consistency.
+- Endpoint lifecycle status in `CONTRACTS/status.backend.md` backlog rows may lag `api.contract.json` + deployed function folders (example pattern: endpoint marked pending after contract/implementation exist); treat as documentation drift.
+- For `checkWord` history persistence, verify `request_id` semantics end-to-end: contract marks it optional, but runtime may derive deterministic fallback IDs (owner+level+clue+direction+word), which dedupe repeated identical guesses beyond pure retry safety unless explicitly documented.
+- When migrations add operational objects (indexes, RLS policy names, SECURITY DEFINER RPCs), `CONTRACTS/db.schema.sql` often captures table columns first and omits those operational surfaces; flag as contract-completeness warning if feature behavior depends on them.
+- CheckWord scoped sync is considered clean once all three are true together: `api.contract.json` documents retry/dedup semantics for optional `request_id`, migration `009` exposes history+RPC surfaces, and `status.backend.md` milestone/file map versions match (`api` 1.1.2, `db` 1.1.5).

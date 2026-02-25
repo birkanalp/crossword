@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { CrosswordLevel, FilledCells, Clue, Direction } from '@/domain/crossword/types';
+import type {
+  CrosswordLevel,
+  FilledCells,
+  Clue,
+  Direction,
+  LevelProgress,
+} from '@/domain/crossword/types';
 import type { GridPosition } from '@/domain/crossword/types';
 import {
   buildEmptyFilledCells,
+  deriveCorrectClueIds,
   findClueForCell,
   resolveDirectionOnCellTap,
   isPuzzleComplete,
@@ -44,8 +51,8 @@ interface GameState {
 // ─── Actions Shape ────────────────────────────────────────────────────────────
 
 interface GameActions {
-  /** Load a level and optionally restore saved progress */
-  loadLevel: (level: CrosswordLevel, savedCells?: FilledCells, savedTime?: number) => void;
+  /** Load a level and optionally restore saved progress from API/local */
+  loadLevel: (level: CrosswordLevel, savedProgress?: LevelProgress | null) => void;
 
   /** Handle a cell tap — updates selection and direction */
   tapCell: (row: number, col: number) => void;
@@ -123,26 +130,40 @@ export const useGameStore = create<GameState & GameActions>()(
   subscribeWithSelector((set, get) => ({
     ...initialState,
 
-    loadLevel: (level, savedCells, savedTime) => {
-      const filledCells = savedCells ?? buildEmptyFilledCells(level);
-      const firstClue = level.clues.find((c) => c.direction === 'across') ?? level.clues[0] ?? null;
+    loadLevel: (level, savedProgress) => {
+      const filledCells =
+        savedProgress?.filledCells ?? buildEmptyFilledCells(level);
+      const elapsedTime = savedProgress?.elapsedTime ?? 0;
+      const hintsUsed = savedProgress?.hintsUsed ?? 0;
+      const mistakes = savedProgress?.mistakes ?? 0;
+      const isCompleted = savedProgress?.isCompleted ?? false;
+      const correctClueIds = savedProgress
+        ? deriveCorrectClueIds(level.clues, filledCells)
+        : new Set<string>();
+
+      // Select first unanswered clue, or first across clue if all done
+      const firstUnanswered =
+        level.clues.find((c) => !correctClueIds.has(c.id)) ??
+        level.clues.find((c) => c.direction === 'across') ??
+        level.clues[0] ??
+        null;
 
       set({
         currentLevel: level,
         filledCells,
-        elapsedTime: savedTime ?? 0,
-        hintsUsed: 0,
-        mistakes: 0,
-        isCompleted: false,
-        scoreBreakdown: null,
+        elapsedTime,
+        hintsUsed,
+        mistakes,
+        isCompleted,
+        scoreBreakdown: null, // Server resume doesn't include breakdown; completion modal uses local calc
         wrongCells: new Set(),
-        correctClueIds: new Set(),
-        selectedClue: firstClue,
-        selectedCell: firstClue
-          ? { row: firstClue.startRow, col: firstClue.startCol }
+        correctClueIds,
+        selectedClue: firstUnanswered,
+        selectedCell: firstUnanswered
+          ? { row: firstUnanswered.startRow, col: firstUnanswered.startCol }
           : null,
-        direction: firstClue?.direction ?? 'across',
-        isTimerRunning: true,
+        direction: firstUnanswered?.direction ?? 'across',
+        isTimerRunning: !isCompleted,
       });
     },
 

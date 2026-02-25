@@ -28,7 +28,7 @@ import {
   selectIsCompleted,
   selectCorrectClueIds,
 } from '@/store/gameStore';
-import { useLevel, checkWord } from '@/api/hooks/useLevels';
+import { useLevel, checkWord, isValidLevelId } from '@/api/hooks/useLevels';
 import { useUserStore, selectUser, selectCoins } from '@/store/userStore';
 import { buildCellStates } from '@/components/grid/CrosswordGrid';
 import { useAutoSave } from '@/hooks/useAutoSave';
@@ -37,6 +37,7 @@ import { useHaptics } from '@/hooks/useHaptics';
 import { Colors } from '@/constants/colors';
 import { APP_CONFIG } from '@/constants/config';
 import { cellKey, getCellsForClue } from '@/domain/crossword/logic';
+import { v4 as uuidv4 } from 'uuid';
 import type { GridPosition, Clue } from '@/domain/crossword/types';
 import { track } from '@/lib/analytics';
 import { LevelTopBar } from '@/components/game/LevelTopBar';
@@ -70,7 +71,11 @@ export default function LevelScreen() {
   const SHOW_HINT_COST = 1;
 
   // ─── Remote data ─────────────────────────────────────────────────────────
-  const { data: levelData, isLoading, isError } = useLevel(id ?? null, guestId ? { guestId } : {});
+  const { data: levelData, isLoading, isError, error, refetch } = useLevel(
+    id ?? null,
+    guestId ? { guestId } : {},
+  );
+  const idInvalid = id != null && !isValidLevelId(id);
 
   // ─── Game state ──────────────────────────────────────────────────────────
   const filledCells = useGameStore(selectFilledCells);
@@ -155,7 +160,7 @@ export default function LevelScreen() {
   useEffect(() => {
     if (!levelData) return;
     const { level, progress: serverProgress } = levelData;
-    loadLevel(level, serverProgress?.filledCells, serverProgress?.elapsedTime);
+    loadLevel(level, serverProgress ?? null);
     track({
       name: 'puzzle_started',
       level_id: level.id,
@@ -313,6 +318,7 @@ export default function LevelScreen() {
       isCheckingRef.current = true;
       setIsChecking(true);
 
+      const storeAtSubmit = useGameStore.getState();
       let correct = false;
       try {
         correct = await checkWord(
@@ -320,7 +326,14 @@ export default function LevelScreen() {
           clue.number,
           clue.direction,
           buffer.join(''),
-          guestId ? { guestId } : undefined,
+          {
+            ...(guestId ? { guestId } : {}),
+            requestId: uuidv4(),
+            stateJson: storeAtSubmit.filledCells,
+            timeSpent: storeAtSubmit.elapsedTime,
+            hintsUsed: storeAtSubmit.hintsUsed,
+            mistakes: storeAtSubmit.mistakes,
+          },
         );
       } finally {
         isCheckingRef.current = false;
@@ -464,12 +477,36 @@ export default function LevelScreen() {
     );
   }
 
-  if (isError || !level) {
+  if (idInvalid) {
     return (
       <View style={[styles.root, styles.centered]}>
-        <Text style={styles.statusText}>Seviye yüklenemedi.</Text>
+        <Text style={styles.statusText}>
+          Geçersiz seviye kimliği. Lütfen seviye listesinden seçin.
+        </Text>
         <TouchableOpacity onPress={handleBack} style={{ marginTop: 16 }}>
-          <Text style={{ color: Colors.primary }}>Geri dön</Text>
+          <Text style={{ color: Colors.primary, fontWeight: '600' }}>Geri dön</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (isError || !level) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Seviye yüklenemedi.';
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <Text style={styles.statusText}>Seviye yüklenemedi</Text>
+        <Text style={[styles.statusText, { fontSize: 14, marginTop: 8, opacity: 0.8 }]}>
+          {errorMessage}
+        </Text>
+        <TouchableOpacity
+          onPress={() => void refetch()}
+          style={{ marginTop: 16, paddingVertical: 12, paddingHorizontal: 24, backgroundColor: Colors.primary, borderRadius: 12 }}
+        >
+          <Text style={{ color: Colors.textOnPrimary, fontWeight: '700' }}>Tekrar dene</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleBack} style={{ marginTop: 12 }}>
+          <Text style={{ color: Colors.primary, fontWeight: '600' }}>Geri dön</Text>
         </TouchableOpacity>
       </View>
     );

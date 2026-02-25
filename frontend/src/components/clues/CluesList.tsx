@@ -75,6 +75,7 @@ function CluesListComponent({ clues, selectedClue, onCluePress, extraBottomPaddi
       ref={scrollRef}
       style={styles.container}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.content, extraBottomPadding > 0 && { paddingBottom: extraBottomPadding }]}
     >
       {acrossClues.length > 0 && (

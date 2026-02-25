@@ -212,6 +212,24 @@ export function buildEmptyFilledCells(level: CrosswordLevel): FilledCells {
 }
 
 /**
+ * Derives clue IDs that are fully filled from a FilledCells map.
+ * Used when resuming from server progress: backend only stores cells from
+ * correct validations, so any clue whose cells are all present was validated.
+ */
+export function deriveCorrectClueIds(clues: Clue[], filledCells: FilledCells): Set<string> {
+  const ids = new Set<string>();
+  for (const clue of clues) {
+    const cells = getCellsForClue(clue);
+    const allFilled = cells.every((pos) => {
+      const letter = filledCells[cellKey(pos.row, pos.col)];
+      return letter !== undefined && letter !== '';
+    });
+    if (allFilled) ids.add(clue.id);
+  }
+  return ids;
+}
+
+/**
  * Flattens a 2D grid array into a lookup map for O(1) access.
  */
 export function buildCellMap(grid: CellData[][]): Map<string, CellData> {

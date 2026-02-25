@@ -34,7 +34,7 @@ interface ApiGridJson {
 export interface ApiLevel {
   id: string;
   version: number;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   is_premium: boolean;
   grid_json: ApiGridJson;
   clues_json: ApiCluesJson;
@@ -95,6 +95,19 @@ export function adaptApiLevel(apiLevel: ApiLevel): CrosswordLevel {
 }
 
 /**
+ * Sanitizes state_json to FilledCells (row-col → letter). Backend stores verbatim;
+ * we only keep string values for safety.
+ */
+function toFilledCells(raw: Record<string, unknown> | null | undefined): FilledCells {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: FilledCells = {};
+  for (const [key, val] of Object.entries(raw)) {
+    if (typeof val === 'string') result[key] = val;
+  }
+  return result;
+}
+
+/**
  * Converts the server's UserProgressSnapshot into the frontend LevelProgress type.
  * state_json is treated as FilledCells (the client owns this format per the contract).
  */
@@ -102,7 +115,7 @@ export function adaptProgressSnapshot(
   levelId: string,
   snapshot: ApiUserProgressSnapshot,
 ): LevelProgress {
-  const filledCells = snapshot.state_json as FilledCells;
+  const filledCells = toFilledCells(snapshot.state_json as Record<string, unknown>);
 
   return {
     levelId,
@@ -160,9 +173,9 @@ function adaptClue(apiClue: ApiClue, direction: 'across' | 'down'): Clue {
 }
 
 function difficultyLabel(difficulty: ApiLevel['difficulty']): string {
-  return { easy: 'Kolay', medium: 'Orta', hard: 'Zor' }[difficulty];
+  return { easy: 'Kolay', medium: 'Orta', hard: 'Zor', expert: 'Uzman' }[difficulty];
 }
 
 function difficultyToCoinReward(difficulty: ApiLevel['difficulty']): number {
-  return { easy: 20, medium: 40, hard: 70 }[difficulty];
+  return { easy: 20, medium: 40, hard: 70, expert: 100 }[difficulty];
 }

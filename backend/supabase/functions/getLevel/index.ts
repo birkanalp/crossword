@@ -37,9 +37,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: level, error } = await db
     .from("levels")
     .select(
-      "id, version, difficulty, is_premium, grid_json, clues_json, answer_hash, difficulty_multiplier",
+      "id, version, difficulty, is_premium, grid_json, clues_json, answer_hash, difficulty_multiplier, review_status",
     )
     .eq("id", levelId)
+    .eq("review_status", "approved")
     .is("deleted_at", null)
     .single();
 

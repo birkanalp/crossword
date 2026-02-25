@@ -2,7 +2,7 @@
 // Shared Types — Crossword Puzzle Game Backend
 // =============================================================================
 
-export type Difficulty = "easy" | "medium" | "hard";
+export type Difficulty = "easy" | "medium" | "hard" | "expert";
 
 // ---------------------------------------------------------------------------
 // Level JSON structures (stored in DB; returned to client without answer_hash)
@@ -61,6 +61,18 @@ export interface SubmitScoreResponse {
   score: number;
   rank: number;
   is_new_best: boolean;
+}
+
+export interface CheckWordRequest {
+  level_id: string;
+  clue_number: number;
+  direction: "across" | "down";
+  word: string;
+  request_id?: string;
+  state_json?: Record<string, unknown>;
+  time_spent?: number;
+  hints_used?: number;
+  mistakes?: number;
 }
 
 // ---------------------------------------------------------------------------

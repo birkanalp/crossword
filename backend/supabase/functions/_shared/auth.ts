@@ -65,10 +65,26 @@ export async function getCallerIdentity(
   return { userId: null, guestId: null, jwt: null, isAuthenticated: false };
 }
 
-// RFC 4122 UUID v4 pattern
+// UUID format (8-4-4-4-12 hex). Accepts v1–v5; levels/DB may use non-v4 IDs.
 const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isValidUUID(value: string): boolean {
   return UUID_RE.test(value);
+}
+
+/**
+ * Admin-only: verify Bearer JWT and that app_metadata.role === 'admin'.
+ * Returns { userId } if valid admin, null otherwise.
+ */
+export async function requireAdmin(req: Request): Promise<{ userId: string } | null> {
+  const authHeader = req.headers.get("authorization") ?? "";
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const jwt = authHeader.slice(7);
+  const client = userClient(jwt);
+  const { data: { user }, error } = await client.auth.getUser();
+  if (error || !user) return null;
+  const role = (user.app_metadata as Record<string, unknown>)?.role;
+  if (role !== "admin") return null;
+  return { userId: user.id };
 }

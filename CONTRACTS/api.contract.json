@@ -1,11 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "contractVersion": "1.0.0",
-  "lastUpdated": "2026-02-21",
+  "contractVersion": "1.1.3",
+  "lastUpdated": "2026-02-25",
   "owner": "backend-agent",
   "consumers": ["frontend-agent"],
 
   "_changelog": [
+    { "version": "1.1.3", "date": "2026-02-25", "note": "Added Phase 3 admin endpoints for puzzle review workflow and admin metrics dashboard with strict admin JWT requirements." },
+    { "version": "1.1.2", "date": "2026-02-25", "note": "checkWord now persists validation attempts and resume progress (word-level) when caller identity is present; added optional idempotency/progress fields." },
+    { "version": "1.1.1", "date": "2026-02-24", "note": "Contract sync: added implemented getDailyChallenge and checkWord endpoint definitions." },
+    { "version": "1.1.0", "date": "2026-02-24", "note": "Sync with migrated DB truth: added 'expert' to Level difficulty enum." },
     { "version": "1.0.0", "date": "2026-02-21", "note": "Phase 1 initial contract — getLevel, submitScore, mergeGuestProgress" }
   ],
 
@@ -83,6 +87,81 @@
         }
       },
       "errors": ["400", "403", "404"]
+    },
+
+    "getDailyChallenge": {
+      "method": "GET",
+      "path": "/getDailyChallenge",
+      "description": "Fetch today's daily challenge level and the caller's saved progress for that level (if any). answer fields are stripped from clues.",
+      "auth": {
+        "required": false,
+        "notes": "Guests pass x-guest-id. Auth users pass Bearer JWT."
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["level", "progress"],
+            "properties": {
+              "level": { "$ref": "#/components/Level" },
+              "progress": {
+                "oneOf": [
+                  { "$ref": "#/components/UserProgressSnapshot" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "errors": ["404"]
+    },
+
+    "checkWord": {
+      "method": "POST",
+      "path": "/checkWord",
+      "description": "Validates a single submitted word for a clue and returns only a boolean correctness result. When the caller identity is present (Bearer JWT or x-guest-id), the backend also persists validation history and upserts level progress for resume.",
+      "auth": {
+        "required": false,
+        "notes": "No JWT required. Endpoint never returns answer strings."
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["level_id", "clue_number", "direction", "word"],
+          "properties": {
+            "level_id": { "type": "string", "format": "uuid" },
+            "clue_number": { "type": "integer", "minimum": 1 },
+            "direction": { "type": "string", "enum": ["across", "down"] },
+            "word": { "type": "string", "minLength": 1 },
+            "request_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional idempotency key for retry-safe history writes. If omitted, server derives a deterministic fallback id. Duplicate identical submissions may be coalesced by idempotency. Send a per-action UUID when every attempt must be retained."
+            },
+            "state_json": {
+              "type": "object",
+              "description": "Optional client snapshot to persist for resume. If omitted, server at least stores correctly validated word cells."
+            },
+            "time_spent": { "type": "integer", "minimum": 0 },
+            "hints_used": { "type": "integer", "minimum": 0 },
+            "mistakes": { "type": "integer", "minimum": 0 }
+          }
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["correct"],
+            "properties": {
+              "correct": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "errors": ["400", "404", "405", "500"]
     },
 
     "submitScore": {
@@ -196,6 +275,256 @@
         }
       },
       "errors": ["400", "401", "500"]
+    },
+
+    "adminListPuzzles": {
+      "method": "GET",
+      "path": "/admin/puzzles",
+      "description": "Admin-only puzzle moderation list endpoint with status filtering and pagination.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "queryParams": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "required": false
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "required": false
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "required": false
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["items", "total"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/AdminPuzzleSummary" }
+              },
+              "total": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "403", "500"]
+    },
+
+    "adminGetPuzzleById": {
+      "method": "GET",
+      "path": "/admin/puzzles/:id",
+      "description": "Admin-only puzzle detail payload for review/edit workflow. Returns full level content including clue answers and hints.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "pathParams": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "required": true
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["level"],
+            "properties": {
+              "level": { "$ref": "#/components/AdminLevel" }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "403", "404", "500"]
+    },
+
+    "adminPatchPuzzleClue": {
+      "method": "PATCH",
+      "path": "/admin/puzzles/:id/clues/:clueKey",
+      "description": "Admin-only partial clue update. Backend must recompute level answer_hash after successful clue edits.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "pathParams": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "required": true
+        },
+        "clueKey": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*[AD]$",
+          "required": true,
+          "description": "Crossword clue key such as 1A or 3D."
+        }
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "text": { "type": "string", "minLength": 1 },
+            "answer": { "type": "string", "minLength": 1 },
+            "hint": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["level"],
+            "properties": {
+              "level": { "$ref": "#/components/AdminLevel" }
+            }
+          }
+        },
+        "204": {
+          "description": "No content. Clue updated successfully without response body."
+        }
+      },
+      "errors": ["400", "401", "403", "404", "500"]
+    },
+
+    "adminPuzzleDecision": {
+      "method": "POST",
+      "path": "/admin/puzzles/:id/decision",
+      "description": "Admin-only review decision endpoint. review_notes are mandatory when rejecting a puzzle.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "pathParams": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "required": true
+        }
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["action"],
+              "additionalProperties": false,
+              "properties": {
+                "action": { "type": "string", "enum": ["approve"] },
+                "review_notes": { "type": "string", "minLength": 1 }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["action", "review_notes"],
+              "additionalProperties": false,
+              "properties": {
+                "action": { "type": "string", "enum": ["reject"] },
+                "review_notes": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["success"],
+            "properties": {
+              "success": { "type": "boolean", "enum": [true] }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "403", "404", "500"]
+    },
+
+    "adminMetricsOverview": {
+      "method": "GET",
+      "path": "/admin/metrics/overview",
+      "description": "Admin-only aggregated KPI endpoint for dashboard cards.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["daily_plays", "total_users", "paid_users", "active_users_15min"],
+            "properties": {
+              "daily_plays": { "type": "integer", "minimum": 0 },
+              "total_users": { "type": "integer", "minimum": 0 },
+              "paid_users": { "type": "integer", "minimum": 0 },
+              "active_users_15min": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      },
+      "errors": ["401", "403", "500"]
+    },
+
+    "adminMetricsDaily": {
+      "method": "GET",
+      "path": "/admin/metrics/daily",
+      "description": "Admin-only daily plays/completions time series for date range charts.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "queryParams": {
+        "from": {
+          "type": "string",
+          "format": "date",
+          "required": true,
+          "description": "Inclusive lower bound (YYYY-MM-DD)."
+        },
+        "to": {
+          "type": "string",
+          "format": "date",
+          "required": true,
+          "description": "Inclusive upper bound (YYYY-MM-DD)."
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["series"],
+            "properties": {
+              "series": {
+                "type": "array",
+                "items": { "$ref": "#/components/AdminDailyMetricsPoint" }
+              }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "403", "500"]
     }
 
   },
@@ -408,6 +737,42 @@
       "proposedResolution": "Agree on final difficulty set before Phase 2 level upload. If 'expert' is needed, add to both contracts as a patch bump.",
       "breakingChange": false,
       "affectedFiles": ["level.schema.json#/definitions/GridCell", "api.contract.json#/components/Level/properties/difficulty", "frontend: src/domain/crossword/types.ts"]
+    },
+    "CR-009": {
+      "status": "open",
+      "raisedBy": "frontend-agent",
+      "raisedAt": "2026-02-25",
+      "title": "listLevels endpoint needed for level browser",
+      "description": "Level selection requires actual level UUIDs from a fetched list. getLevel requires UUID (api.contract.json#/endpoints/getLevel). Home previously navigated to /game/level/1 (non-UUID), causing opaque 400. Frontend now uses /game/levels with getDailyChallenge as fallback, but full level browser needs a paginated list endpoint.",
+      "proposedEndpoint": {
+        "method": "GET",
+        "path": "/listLevels",
+        "description": "Returns paginated list of playable level metadata (id, difficulty, is_premium) for level browser. No grid/clues.",
+        "auth": { "required": false, "notes": "Same as getLevel." },
+        "queryParams": {
+          "difficulty": { "type": "string", "enum": ["easy", "medium", "hard", "expert"], "required": false },
+          "limit": { "type": "integer", "default": 20 },
+          "offset": { "type": "integer", "default": 0 }
+        },
+        "response": {
+          "200": {
+            "schema": {
+              "type": "object",
+              "required": ["levels", "total"],
+              "properties": {
+                "levels": {
+                  "type": "array",
+                  "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "format": "uuid" }, "difficulty": { "type": "string" }, "is_premium": { "type": "boolean" } } }
+                },
+                "total": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "errors": ["400"]
+      },
+      "breakingChange": false,
+      "affectedFiles": ["api.contract.json#/endpoints", "frontend: app/game/levels.tsx", "frontend: src/api/hooks/useLevels.ts"]
     }
 
   },
@@ -420,7 +785,7 @@
       "properties": {
         "id":          { "type": "string", "format": "uuid" },
         "version":     { "type": "integer", "minimum": 1 },
-        "difficulty":  { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "difficulty":  { "type": "string", "enum": ["easy", "medium", "hard", "expert"] },
         "is_premium":  { "type": "boolean" },
         "grid_json":   { "$ref": "level.schema.json#/definitions/GridJson" },
         "clues_json":  { "$ref": "level.schema.json#/definitions/CluesJson" }
@@ -440,6 +805,90 @@
         "time_spent":   { "type": "integer", "minimum": 0 },
         "hints_used":   { "type": "integer", "minimum": 0 },
         "mistakes":     { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "AdminPuzzleSummary": {
+      "type": "object",
+      "required": ["id", "difficulty", "language", "review_status", "created_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard", "expert"] },
+        "language": { "type": "string", "minLength": 2 },
+        "review_status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "AdminClue": {
+      "type": "object",
+      "required": ["number", "clue", "answer_length", "start", "answer", "hint"],
+      "additionalProperties": false,
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "clue": { "type": "string", "minLength": 1 },
+        "answer_length": { "type": "integer", "minimum": 1 },
+        "start": { "$ref": "level.schema.json#/definitions/ClueStart" },
+        "answer": { "type": "string", "minLength": 1 },
+        "hint": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "AdminCluesJson": {
+      "type": "object",
+      "required": ["across", "down"],
+      "additionalProperties": false,
+      "properties": {
+        "across": {
+          "type": "array",
+          "items": { "$ref": "#/components/AdminClue" },
+          "minItems": 1
+        },
+        "down": {
+          "type": "array",
+          "items": { "$ref": "#/components/AdminClue" },
+          "minItems": 1
+        }
+      }
+    },
+
+    "AdminLevel": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "difficulty",
+        "language",
+        "is_premium",
+        "grid_json",
+        "clues_json",
+        "review_status",
+        "review_notes",
+        "reviewed_by",
+        "reviewed_at"
+      ],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "version": { "type": "integer", "minimum": 1 },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard", "expert"] },
+        "language": { "type": "string", "minLength": 2 },
+        "is_premium": { "type": "boolean" },
+        "grid_json": { "$ref": "level.schema.json#/definitions/GridJson" },
+        "clues_json": { "$ref": "#/components/AdminCluesJson" },
+        "review_status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "review_notes": { "type": ["string", "null"] },
+        "reviewed_by": { "type": ["string", "null"], "format": "uuid" },
+        "reviewed_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+
+    "AdminDailyMetricsPoint": {
+      "type": "object",
+      "required": ["date", "plays", "completions"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "plays": { "type": "integer", "minimum": 0 },
+        "completions": { "type": "integer", "minimum": 0 }
       }
     }
 

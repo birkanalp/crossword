@@ -43,8 +43,8 @@ export interface CrosswordLevel {
   // title is not part of the backend Level component (api.contract.json#/components/Level).
   // Displayed as a derived label or left empty until a CR adds it.
   title: string;
-  /** Contract: api.contract.json#/components/Level — enum: easy | medium | hard */
-  difficulty: 'easy' | 'medium' | 'hard';
+  /** Contract: api.contract.json#/components/Level — enum: easy | medium | hard | expert */
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   rows: number;
   cols: number;
   grid: CellData[][];

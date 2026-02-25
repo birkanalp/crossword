@@ -20,6 +20,7 @@ const TIME_BOUNDS: Record<Difficulty, { min: number; max: number }> = {
   easy:   { min: 10,   max: 7_200  },  // 10s – 2h
   medium: { min: 30,   max: 14_400 },  // 30s – 4h
   hard:   { min: 60,   max: 28_800 },  // 60s – 8h
+  expert: { min: 90,   max: 43_200 },  // 90s – 12h
 };
 
 const MAX_HINTS   = 20;

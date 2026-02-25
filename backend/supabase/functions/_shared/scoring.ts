@@ -23,6 +23,7 @@ export const DIFFICULTY_MULTIPLIER: Record<string, number> = {
   easy:   1.0,
   medium: 1.5,
   hard:   2.0,
+  expert: 2.5,
 };
 
 // ---------------------------------------------------------------------------

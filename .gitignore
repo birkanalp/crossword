@@ -58,3 +58,4 @@ docker-data/
 *.swp
 *.swo
 .mcp.json
+*.bz2

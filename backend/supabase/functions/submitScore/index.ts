@@ -27,6 +27,7 @@ const COINS_PER_COMPLETION: Record<Difficulty, number> = {
   easy:   10,
   medium: 20,
   hard:   35,
+  expert: 50,
 };
 
 Deno.serve(async (req: Request): Promise<Response> => {

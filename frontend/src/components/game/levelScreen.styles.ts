@@ -363,6 +363,18 @@ export function makeStyles(isDark: boolean) {
   });
 }
 
+/** Sizing constants for WordPreview letter boxes (dynamic sizing uses these as bounds) */
+export const PREVIEW_PADDING_H = 16;
+export const PREVIEW_PADDING_V = 10;
+export const PREVIEW_GAP = 8;
+export const PREVIEW_BOX_MIN = 24;
+export const PREVIEW_BOX_MAX = 50;
+export const PREVIEW_BOX_DEFAULT = 44;
+export const PREVIEW_BOX_HEIGHT_RATIO = 50 / 44; // original height/width
+
+/** Fixed height for WordPreview container so clue length does not affect layout */
+export const PREVIEW_CONTAINER_HEIGHT = 72;
+
 export function makePreviewStyles(isDark: boolean) {
   const bg = isDark ? Colors.bgDark : '#F8F8FB';
   const border = isDark ? Colors.cellBorderDark : Colors.cellBorder;
@@ -373,20 +385,19 @@ export function makePreviewStyles(isDark: boolean) {
       position: 'absolute',
       left: 0,
       right: 0,
+      height: PREVIEW_CONTAINER_HEIGHT,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      flexWrap: 'wrap',
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      gap: 8,
+      flexWrap: 'nowrap',
+      paddingHorizontal: PREVIEW_PADDING_H,
+      paddingVertical: PREVIEW_PADDING_V,
+      gap: PREVIEW_GAP,
       backgroundColor: bg,
       borderTopWidth: 1,
       borderTopColor: border,
     },
     box: {
-      width: 44,
-      height: 50,
       borderRadius: 8,
       borderWidth: 2,
       borderColor: border,
@@ -403,7 +414,6 @@ export function makePreviewStyles(isDark: boolean) {
       borderWidth: 2.5,
     },
     letter: {
-      fontSize: 20,
       fontWeight: '700',
       color: 'transparent',
     },

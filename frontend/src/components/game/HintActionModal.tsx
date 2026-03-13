@@ -27,6 +27,11 @@ type HintActionModalProps = {
   onWatchAd: () => void;
   /** Called when the user confirms they want to spend coins */
   onSpendCoins: () => void;
+  /**
+   * When true, the "Watch Ad" option is hidden.
+   * Set this when the user has the no-ads entitlement (RevenueCat).
+   */
+  hideAds?: boolean;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -39,6 +44,7 @@ export function HintActionModal({
   coinBalance,
   onWatchAd,
   onSpendCoins,
+  hideAds = false,
 }: HintActionModalProps) {
   const canAfford = coinBalance >= cost;
   const title = actionType === 'reveal_letter' ? 'Harf Aç' : 'İpucu Al';
@@ -56,20 +62,24 @@ export function HintActionModal({
         <Pressable style={styles.card} onPress={() => {}}>
           <Text style={styles.title}>{title}</Text>
 
-          {/* ── Watch Ad button (always enabled) ─────────────────────────── */}
-          <TouchableOpacity
-            style={[styles.button, styles.adButton]}
-            onPress={onWatchAd}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonIcon}>📺</Text>
-            <View style={styles.buttonTextContainer}>
-              <Text style={styles.buttonLabel}>Reklam İzle</Text>
-              <Text style={styles.buttonSub}>Ücretsiz</Text>
-            </View>
-          </TouchableOpacity>
+          {/* ── Watch Ad button (hidden for no-ads entitlement) ──────────── */}
+          {!hideAds && (
+            <>
+              <TouchableOpacity
+                style={[styles.button, styles.adButton]}
+                onPress={onWatchAd}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonIcon}>📺</Text>
+                <View style={styles.buttonTextContainer}>
+                  <Text style={styles.buttonLabel}>Reklam İzle</Text>
+                  <Text style={styles.buttonSub}>Ücretsiz</Text>
+                </View>
+              </TouchableOpacity>
 
-          <Text style={styles.divider}>veya</Text>
+              <Text style={styles.divider}>veya</Text>
+            </>
+          )}
 
           {/* ── Spend Coins button (disabled when balance is insufficient) ─ */}
           <TouchableOpacity

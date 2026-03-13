@@ -58,6 +58,7 @@ import type { GuessRecord } from '@/components/game/types';
 import { showRewardedAd } from '@/lib/admob';
 import { logAdEvent } from '@/api/adEvents';
 import { normalizeTurkishWord, toTurkishUpper } from '@/utils/turkish';
+import { hasNoAds } from '@/lib/revenuecat';
 
 // ─── Level Screen ─────────────────────────────────────────────────────────────
 
@@ -78,6 +79,12 @@ export default function LevelScreen() {
 
   const REVEAL_LETTER_COST = 2;
   const SHOW_HINT_COST = 1;
+
+  // ─── No-ads entitlement check ─────────────────────────────────────────────
+  const [noAdsActive, setNoAdsActive] = useState(false);
+  useEffect(() => {
+    hasNoAds().then(setNoAdsActive).catch(() => { /* ignore — default false */ });
+  }, []);
 
   // ─── Remote data ─────────────────────────────────────────────────────────
   const { data: levelData, isLoading, isError, error, refetch } = useLevel(
@@ -811,6 +818,7 @@ export default function LevelScreen() {
         coinBalance={coins}
         onWatchAd={handleWatchAd}
         onSpendCoins={handleSpendCoinsForHint}
+        hideAds={noAdsActive}
       />
 
       {(sidebarOpen || historyPanelOpen) && (

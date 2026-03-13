@@ -77,6 +77,8 @@
       "sentryDsn": "",
       "revenueCatApiKeyIos": "",
       "revenueCatApiKeyAndroid": "",
+      "admobBannerIos": "",
+      "admobBannerAndroid": "",
       "admobInterstitialIos": "",
       "admobInterstitialAndroid": "",
       "admobRewardedIos": "",

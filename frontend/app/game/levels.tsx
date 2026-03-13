@@ -15,6 +15,7 @@ import { useListLevels, type LevelSummary } from '@/api/hooks/useLevels';
 import { useUserStore, selectUser } from '@/store/userStore';
 import { Colors } from '@/constants/colors';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { PaywallModal } from '@/components/PaywallModal';
 
 // ─── Levels Browser Screen ───────────────────────────────────────────────────
 // 3-column grid, difficulty-colored boxes, completion states, Load more, filter sidebar.
@@ -58,6 +59,7 @@ export default function LevelsScreen() {
   const guestId = user?.type === 'guest' ? user.guestId : undefined;
 
   const [filterOpen, setFilterOpen] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [difficultyFilter, setDifficultyFilter] = useState<Set<string>>(
     new Set(DIFFICULTY_ORDER),
@@ -88,8 +90,12 @@ export default function LevelsScreen() {
     });
   }, []);
 
-  const handlePlayLevel = (levelId: string) => {
-    router.push(`/game/level/${levelId}`);
+  const handlePlayLevel = (level: LevelSummary) => {
+    if (level.is_premium) {
+      setPaywallVisible(true);
+      return;
+    }
+    router.push(`/game/level/${level.id}`);
   };
 
   const handleBack = () => router.back();
@@ -219,7 +225,7 @@ export default function LevelsScreen() {
                     <LevelBox
                       key={level.id}
                       level={level}
-                      onPress={() => handlePlayLevel(level.id)}
+                      onPress={() => handlePlayLevel(level)}
                       styles={styles}
                     />
                   ))}
@@ -240,6 +246,15 @@ export default function LevelsScreen() {
           })
         )}
       </ScrollView>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onPremiumUnlocked={() => {
+          // Refetch level list so premium levels become playable
+          Object.values(queries).forEach((q) => void q.refetch());
+        }}
+      />
 
       <Modal
         visible={filterOpen}
@@ -314,19 +329,26 @@ function LevelBox({
 }) {
   const status = getLevelStatus(level);
   const diffColor = DIFFICULTY_COLORS[level.difficulty] ?? Colors.primary;
+  const isPremiumLocked = level.is_premium;
 
   return (
     <TouchableOpacity
       style={[
         s.levelBox,
         { backgroundColor: diffColor },
+        isPremiumLocked && s.levelBoxLocked,
         status === 'completed' && s.levelBoxCompleted,
         status === 'in_progress' && { borderWidth: 3, borderColor: diffColor },
       ]}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      {status === 'completed' && (
+      {isPremiumLocked && (
+        <View style={s.lockOverlay}>
+          <MaterialCommunityIcons name="lock" size={22} color="rgba(255,255,255,0.9)" />
+        </View>
+      )}
+      {!isPremiumLocked && status === 'completed' && (
         <View style={s.levelBoxCheck}>
           <MaterialCommunityIcons name="check" size={28} color="#FFF" />
         </View>
@@ -419,8 +441,16 @@ function makeStyles(isDark: boolean, screenWidth: number) {
     levelBoxCompleted: {
       opacity: 0.6,
     },
+    levelBoxLocked: {
+      opacity: 0.55,
+    },
     levelBoxCheck: {
       position: 'absolute',
+    },
+    lockOverlay: {
+      position: 'absolute',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     loadMoreBox: {
       width: boxSize,

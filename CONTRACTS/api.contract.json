@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "contractVersion": "1.3.0",
-  "lastUpdated": "2026-03-02",
+  "contractVersion": "1.3.1",
+  "lastUpdated": "2026-03-13",
   "owner": "backend-agent",
   "consumers": ["frontend-agent"],
 
   "_changelog": [
+    { "version": "1.3.1", "date": "2026-03-13", "note": "Admin todo board moved from browser localStorage to database-backed admin endpoints. Added admin_todos table (migration 022) and GET|POST /admin/todos, PATCH|DELETE /admin/todos/:id." },
     { "version": "1.3.0", "date": "2026-03-02", "note": "Leaderboard system: new profiles table, display_name snapshot on leaderboard_entries, getLeaderboard edge function (GET /functions/v1/getLeaderboard?type=daily|all_time|puzzle&sort_by=score|time&level_id=?&date=?&limit=?&page=?), admin leaderboard endpoints (GET /admin/leaderboard, GET /admin/leaderboard/stats), scoring formula updated with mistake_penalty (mistakes * 30). Migration 019. CR-005 resolved." },
     { "version": "1.2.5", "date": "2026-03-02", "note": "Coin shop: new coin_packages table (migration 018). Public GET /getCoinPackages returns active packages (no auth). Admin CRUD via GET|POST /admin/coin-packages, PUT|DELETE|PATCH(toggle) /admin/coin-packages/:id. New CoinPackage component added." },
     { "version": "1.2.4", "date": "2026-02-27", "note": "Ad events system: new ad_events table (migration 017). adminMetricsOverview response extended with ads_watched_today (integer). Frontend logs rewarded ad completions to POST /ad_events (direct PostgREST insert via RLS). No new edge function needed." },
@@ -973,6 +974,121 @@
         }
       },
       "errors": ["401", "403", "500"]
+    },
+
+    "adminTodosList": {
+      "method": "GET",
+      "path": "/admin/todos",
+      "description": "Admin-only kanban todo list persisted in admin_todos. Ordered by status column and sort_order within each column.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["todos"],
+            "properties": {
+              "todos": {
+                "type": "array",
+                "items": { "$ref": "#/components/AdminTodo" }
+              }
+            }
+          }
+        }
+      },
+      "errors": ["401", "403", "500"]
+    },
+
+    "adminTodoCreate": {
+      "method": "POST",
+      "path": "/admin/todos",
+      "description": "Create a new admin todo card in the requested status column.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["title", "status"],
+          "properties": {
+            "title": { "type": "string", "minLength": 1 },
+            "body": { "type": "string" },
+            "status": { "type": "string", "enum": ["backlog", "ideas", "in_progress", "done", "blocked"] }
+          }
+        }
+      },
+      "response": {
+        "201": {
+          "schema": {
+            "type": "object",
+            "required": ["todo"],
+            "properties": {
+              "todo": { "$ref": "#/components/AdminTodo" }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "403", "500"]
+    },
+
+    "adminTodoUpdate": {
+      "method": "PATCH",
+      "path": "/admin/todos/:id",
+      "description": "Update title, body, and/or status for an admin todo card. If status changes, the server appends the card to the end of the target column.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "title": { "type": "string", "minLength": 1 },
+            "body": { "type": "string" },
+            "status": { "type": "string", "enum": ["backlog", "ideas", "in_progress", "done", "blocked"] }
+          }
+        }
+      },
+      "response": {
+        "200": {
+          "schema": {
+            "type": "object",
+            "required": ["todo"],
+            "properties": {
+              "todo": { "$ref": "#/components/AdminTodo" }
+            }
+          }
+        }
+      },
+      "errors": ["400", "401", "403", "404", "500"]
+    },
+
+    "adminTodoDelete": {
+      "method": "DELETE",
+      "path": "/admin/todos/:id",
+      "description": "Delete an admin todo card.",
+      "auth": {
+        "required": true,
+        "scheme": "bearer",
+        "notes": "JWT required. Caller must have app_metadata.role = 'admin'."
+      },
+      "response": {
+        "204": {
+          "schema": {
+            "type": "null"
+          }
+        }
+      },
+      "errors": ["401", "403", "404", "500"]
     }
 
   },
@@ -1387,6 +1503,19 @@
         "date": { "type": "string", "format": "date" },
         "plays": { "type": "integer", "minimum": 0 },
         "completions": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "AdminTodo": {
+      "type": "object",
+      "required": ["id", "title", "body", "status", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "status": { "type": "string", "enum": ["backlog", "ideas", "in_progress", "done", "blocked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
 

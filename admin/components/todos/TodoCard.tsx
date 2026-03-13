@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { cn } from '@/components/ui/cn'
 import { Button } from '@/components/ui/Button'
-import type { Todo, TodoStatus } from '@/lib/todos-storage'
+import type { Todo, TodoStatus } from '@/lib/todos'
 
 const STATUS_LABELS: Record<TodoStatus, string> = {
   backlog: 'Yapılacak',
@@ -23,8 +23,8 @@ const STATUS_STYLES: Record<TodoStatus, string> = {
 
 interface TodoCardProps {
   todo: Todo
-  onUpdate: (id: string, patch: Partial<Pick<Todo, 'title' | 'body' | 'status'>>) => void
-  onDelete: (id: string) => void
+  onUpdate: (id: string, patch: Partial<Pick<Todo, 'title' | 'body' | 'status'>>) => void | Promise<void>
+  onDelete: (id: string) => void | Promise<void>
 }
 
 export function TodoCard({ todo, onUpdate, onDelete }: TodoCardProps) {

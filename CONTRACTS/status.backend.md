@@ -1,6 +1,6 @@
 # Backend Status
-**contractVersion:** 1.3.0
-**lastUpdated:** 2026-03-02
+**contractVersion:** 1.3.1
+**lastUpdated:** 2026-03-13
 **owner:** backend-agent
 
 ---
@@ -32,6 +32,7 @@
 | 21 | Admin leaderboard endpoints (GET /admin/leaderboard, GET /admin/leaderboard/stats) | ✅ Done | `api.contract.json` v1.3.0, `backend/supabase/functions/admin/index.ts` | Admin JWT required; stats returns total_entries, unique_players, avg_score, avg_completion_time, top_scorer |
 | 22 | Scoring formula: mistake_penalty added (mistakes * 30) | ✅ Done | `_shared/scoring.ts` updated, `_shared/types.ts` ScoreInput.mistakes field added | formula: max(0, base - time*2 - hints*50 - mistakes*30) |
 | 23 | submitScore: display_name snapshot from profiles at submission time | ✅ Done | `backend/supabase/functions/submitScore/index.ts` updated | Fetches profiles.username before upsert; stores as display_name on leaderboard_entries |
+| 24 | Admin todo board persisted in DB (`admin_todos`) + CRUD endpoints | ✅ Done | `api.contract.json` v1.3.1, `db.schema.sql` v1.2.1, migration `022_admin_todos.sql` | Admin kanban board moved off browser localStorage to Postgres-backed `/admin/todos` endpoints |
 
 ---
 
@@ -129,7 +130,8 @@ backend/supabase/
 │   ├── 016_app_settings_cron.sql
 │   ├── 017_ad_events.sql
 │   ├── 018_coin_packages.sql
-│   └── 019_leaderboard_profiles.sql
+│   ├── 019_leaderboard_profiles.sql
+│   └── 022_admin_todos.sql
 ├── functions/
 │   ├── _shared/
 │   │   ├── types.ts
@@ -151,9 +153,9 @@ backend/supabase/
 └── config.toml
 
 CONTRACTS/
-├── api.contract.json        ← v1.3.0
+├── api.contract.json        ← v1.3.1
 ├── level.schema.json        ← v1.0.3
 ├── events.contract.md       ← v1.0.0
-├── db.schema.sql            ← v1.2.0
+├── db.schema.sql            ← v1.2.1
 └── status.backend.md        ← this file
 ```

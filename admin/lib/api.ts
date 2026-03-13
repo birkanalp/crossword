@@ -2,6 +2,8 @@
  * Admin API client — CONTRACTS/api.contract.json admin endpoints
  */
 
+import type { Todo, TodoStatus } from '@/lib/todos';
+
 const getBaseUrl = () =>
   process.env.NEXT_PUBLIC_SUPABASE_URL
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
@@ -287,6 +289,40 @@ export async function adminSetAiReviewCronEnabled(
     body: { enabled },
     token,
   });
+}
+
+export interface AdminTodoInput {
+  title: string;
+  body: string;
+  status: TodoStatus;
+}
+
+export async function adminListTodos(
+  token: string
+): Promise<{ data: { todos: Todo[] } | null; error: string | null }> {
+  return adminFetch<{ todos: Todo[] }>('/admin/todos', { token });
+}
+
+export async function adminCreateTodo(
+  token: string,
+  body: AdminTodoInput
+): Promise<{ data: { todo: Todo } | null; error: string | null }> {
+  return adminFetch<{ todo: Todo }>('/admin/todos', { method: 'POST', body, token });
+}
+
+export async function adminUpdateTodo(
+  token: string,
+  id: string,
+  body: Partial<AdminTodoInput>
+): Promise<{ data: { todo: Todo } | null; error: string | null }> {
+  return adminFetch<{ todo: Todo }>(`/admin/todos/${id}`, { method: 'PATCH', body, token });
+}
+
+export async function adminDeleteTodo(
+  token: string,
+  id: string
+): Promise<{ data: null; error: string | null }> {
+  return adminFetch<null>(`/admin/todos/${id}`, { method: 'DELETE', token });
 }
 
 // ─── Coin Packages ────────────────────────────────────────────────────────────

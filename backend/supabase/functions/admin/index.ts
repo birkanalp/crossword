@@ -17,6 +17,10 @@
 //   PUT    /admin/coin-packages/:id              -> update coin package
 //   DELETE /admin/coin-packages/:id              -> delete coin package
 //   PATCH  /admin/coin-packages/:id/toggle       -> toggle is_active
+//   GET    /admin/todos                          -> list admin kanban todos
+//   POST   /admin/todos                          -> create admin todo
+//   PATCH  /admin/todos/:id                      -> update admin todo
+//   DELETE /admin/todos/:id                      -> delete admin todo
 //   GET    /admin/leaderboard                    -> paginated leaderboard (same params as public getLeaderboard)
 //   GET    /admin/leaderboard/stats              -> aggregate leaderboard stats
 // =============================================================================
@@ -46,6 +50,19 @@ interface CluesJson {
   across: ClueRecord[];
   down: ClueRecord[];
 }
+
+type TodoStatus = "backlog" | "ideas" | "in_progress" | "done" | "blocked";
+
+interface AdminTodoRow {
+  id: string;
+  title: string;
+  body: string | null;
+  status: TodoStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+const TODO_STATUSES: TodoStatus[] = ["backlog", "ideas", "in_progress", "done", "blocked"];
 
 function extractSubPath(pathname: string): string {
   const m = pathname.match(/\/admin(?:\/(.*))?$/);
@@ -82,6 +99,12 @@ function parseRoute(pathname: string): { route: string; id?: string; clueKey?: s
       return { route: "updateCoinPackage", id: parts[1] };
     }
     return { route: "listCoinPackages" };
+  }
+  if (parts[0] === "todos") {
+    if (parts[1] && isValidUUID(parts[1])) {
+      return { route: "todo", id: parts[1] };
+    }
+    return { route: "todos" };
   }
   if (parts[0] === "leaderboard") {
     if (parts[1] === "stats") return { route: "leaderboardStats" };
@@ -141,6 +164,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (route === "updateCoinPackage" && req.method === "PUT" && id) return await handleUpdateCoinPackage(id, req);
     if (route === "updateCoinPackage" && req.method === "DELETE" && id) return await handleDeleteCoinPackage(id);
     if (route === "toggleCoinPackage" && req.method === "PATCH" && id) return await handleToggleCoinPackage(id);
+    if (route === "todos" && req.method === "GET") return await handleListTodos();
+    if (route === "todos" && req.method === "POST") return await handleCreateTodo(req);
+    if (route === "todo" && req.method === "PATCH" && id) return await handleUpdateTodo(id, req);
+    if (route === "todo" && req.method === "DELETE" && id) return await handleDeleteTodo(id);
     if (route === "leaderboard" && req.method === "GET") return await handleAdminLeaderboard(url);
     if (route === "leaderboardStats" && req.method === "GET") return await handleAdminLeaderboardStats(url);
   } catch (e) {
@@ -563,6 +590,203 @@ async function handlePatchAiReviewCronEnabled(req: Request): Promise<Response> {
     return errorResponse("Failed to update settings", 500);
   }
   return jsonResponse({ enabled });
+}
+
+function isTodoStatus(value: unknown): value is TodoStatus {
+  return typeof value === "string" && TODO_STATUSES.includes(value as TodoStatus);
+}
+
+function mapTodo(row: AdminTodoRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body ?? "",
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function getNextTodoSortOrder(db: ReturnType<typeof serviceClient>, status: TodoStatus): Promise<number> {
+  const { data, error } = await db
+    .from("admin_todos")
+    .select("sort_order")
+    .eq("status", status)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data?.sort_order ?? 0) + 10;
+}
+
+// ---------------------------------------------------------------------------
+// GET /admin/todos
+// ---------------------------------------------------------------------------
+async function handleListTodos(): Promise<Response> {
+  const { data, error } = await serviceClient()
+    .from("admin_todos")
+    .select("id, title, body, status, created_at, updated_at, sort_order")
+    .order("status")
+    .order("sort_order")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("[admin] listTodos:", error);
+    return errorResponse("Failed to fetch todos", 500);
+  }
+
+  return jsonResponse({ todos: (data ?? []).map((row) => mapTodo(row as AdminTodoRow)) });
+}
+
+// ---------------------------------------------------------------------------
+// POST /admin/todos
+// ---------------------------------------------------------------------------
+async function handleCreateTodo(req: Request): Promise<Response> {
+  let body: { title?: string; body?: string; status?: TodoStatus };
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  const title = body?.title?.trim();
+  const content = typeof body?.body === "string" ? body.body.trim() : "";
+  const status = body?.status;
+
+  if (!title) {
+    return errorResponse("title is required", 400);
+  }
+  if (!isTodoStatus(status)) {
+    return errorResponse("status must be one of backlog, ideas, in_progress, done, blocked", 400);
+  }
+
+  const db = serviceClient();
+  const sortOrder = await getNextTodoSortOrder(db, status);
+
+  const { data, error } = await db
+    .from("admin_todos")
+    .insert({ title, body: content, status, sort_order: sortOrder })
+    .select("id, title, body, status, created_at, updated_at")
+    .single();
+
+  if (error || !data) {
+    console.error("[admin] createTodo:", error);
+    return errorResponse("Failed to create todo", 500);
+  }
+
+  return jsonResponse({ todo: mapTodo(data as AdminTodoRow) }, 201);
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /admin/todos/:id
+// ---------------------------------------------------------------------------
+async function handleUpdateTodo(id: string, req: Request): Promise<Response> {
+  let body: { title?: string; body?: string; status?: TodoStatus };
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  if (!body || typeof body !== "object" || Object.keys(body).length === 0) {
+    return errorResponse("At least one of title, body, status required", 400);
+  }
+
+  const db = serviceClient();
+  const { data: existing, error: fetchErr } = await db
+    .from("admin_todos")
+    .select("id, status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchErr) {
+    console.error("[admin] updateTodo fetch:", fetchErr);
+    return errorResponse("Failed to fetch todo", 500);
+  }
+  if (!existing) {
+    return errorResponse("Todo not found", 404);
+  }
+
+  const update: Record<string, unknown> = {};
+
+  if ("title" in body) {
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    if (!title) {
+      return errorResponse("title must be a non-empty string", 400);
+    }
+    update.title = title;
+  }
+
+  if ("body" in body) {
+    if (typeof body.body !== "string") {
+      return errorResponse("body must be a string", 400);
+    }
+    update.body = body.body.trim();
+  }
+
+  if ("status" in body) {
+    if (!isTodoStatus(body.status)) {
+      return errorResponse("status must be one of backlog, ideas, in_progress, done, blocked", 400);
+    }
+    update.status = body.status;
+    if (body.status !== existing.status) {
+      update.sort_order = await getNextTodoSortOrder(db, body.status);
+    }
+  }
+
+  if (Object.keys(update).length === 0) {
+    return errorResponse("No valid fields provided", 400);
+  }
+
+  const { data, error } = await db
+    .from("admin_todos")
+    .update(update)
+    .eq("id", id)
+    .select("id, title, body, status, created_at, updated_at")
+    .single();
+
+  if (error || !data) {
+    console.error("[admin] updateTodo:", error);
+    return errorResponse("Failed to update todo", 500);
+  }
+
+  return jsonResponse({ todo: mapTodo(data as AdminTodoRow) });
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/todos/:id
+// ---------------------------------------------------------------------------
+async function handleDeleteTodo(id: string): Promise<Response> {
+  const db = serviceClient();
+  const { data: existing, error: fetchErr } = await db
+    .from("admin_todos")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchErr) {
+    console.error("[admin] deleteTodo fetch:", fetchErr);
+    return errorResponse("Failed to fetch todo", 500);
+  }
+  if (!existing) {
+    return errorResponse("Todo not found", 404);
+  }
+
+  const { error } = await db
+    .from("admin_todos")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("[admin] deleteTodo:", error);
+    return errorResponse("Failed to delete todo", 500);
+  }
+
+  return new Response(null, { status: 204 });
 }
 
 // ---------------------------------------------------------------------------

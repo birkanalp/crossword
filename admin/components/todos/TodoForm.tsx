@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
-import type { TodoStatus } from '@/lib/todos-storage'
+import type { TodoStatus } from '@/lib/todos'
 
 const STATUS_LABELS: Record<TodoStatus, string> = {
   backlog: 'Yapılacak',
@@ -14,7 +14,7 @@ const STATUS_LABELS: Record<TodoStatus, string> = {
 
 interface TodoFormProps {
   defaultStatus?: TodoStatus
-  onSubmit: (title: string, body: string, status: TodoStatus) => void
+  onSubmit: (title: string, body: string, status: TodoStatus) => void | Promise<void>
   onCancel?: () => void
 }
 

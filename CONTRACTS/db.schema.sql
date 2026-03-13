@@ -1,7 +1,7 @@
 -- =============================================================================
 -- CONTRACTS/db.schema.sql
--- contractVersion: 1.2.0
--- lastUpdated: 2026-03-02
+-- contractVersion: 1.2.1
+-- lastUpdated: 2026-03-13
 -- owner: backend-agent
 -- consumers: frontend-agent
 --
@@ -18,6 +18,7 @@
 
 -- ---------------------------------------------------------------------------
 -- CHANGELOG
+-- 1.2.1  2026-03-13  Added admin_todos table for admin kanban notes persisted in Postgres. Migration 022.
 -- 1.2.0  2026-03-02  Added profiles table (public usernames + avatar_color) and display_name column on leaderboard_entries (snapshot at submission). Migration 019.
 -- 1.1.6  2026-02-25  Added admin metrics contract notes (daily_plays, users, paid_users, active_users_15min) using existing tables; no new schema required
 -- 1.1.5  2026-02-25  Added user_answer_history contract surface for checkWord validation persistence/resume auditing
@@ -315,3 +316,20 @@ CREATE TABLE coin_transactions (
 --   - user_progress guest rows (guest_id) are excluded from active_users_15min.
 --   - Distinctness is by authenticated user_id.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- admin_todos
+-- Admin-only kanban notes used by the admin panel.
+-- Reads/writes are restricted to authenticated users whose JWT has
+-- app_metadata.role = 'admin'. Service role bypasses RLS for backend routes.
+-- Migration: 022_admin_todos.sql
+-- ---------------------------------------------------------------------------
+CREATE TABLE admin_todos (
+  id         UUID        NOT NULL,   -- PK
+  title      TEXT        NOT NULL,
+  body       TEXT        NOT NULL,
+  status     TEXT        NOT NULL,   -- backlog | ideas | in_progress | done | blocked
+  sort_order INT         NOT NULL,   -- Order within a status column
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);

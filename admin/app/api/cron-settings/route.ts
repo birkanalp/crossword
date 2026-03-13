@@ -21,7 +21,7 @@ async function requireAdmin(req: NextRequest): Promise<boolean> {
   return role === 'admin';
 }
 
-function getDbPool(): Pool | null {
+function getDbPool(): Pool {
   const url = process.env.DATABASE_URL;
   if (url) return new Pool({ connectionString: url });
   const host = process.env.PGHOST ?? '127.0.0.1';

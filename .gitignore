@@ -64,3 +64,5 @@ admin/.next/
 *.swo
 .mcp.json
 *.bz2
+
+data/

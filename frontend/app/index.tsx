@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import { useRouter } from 'expo-router';
 import { useUserStore, selectUser, selectStreak, selectCoins } from '@/store/userStore';
 import { Colors } from '@/constants/colors';
 import { formatElapsedTime } from '@/hooks/useElapsedTimer';
+import { AdBanner } from '@/components/ui/AdBanner';
+import { hasNoAds } from '@/lib/revenuecat';
 
 // ─── Home Screen ─────────────────────────────────────────────────────────────
 
@@ -23,6 +25,11 @@ export default function HomeScreen() {
   const user = useUserStore(selectUser);
   const streak = useUserStore(selectStreak);
   const coins = useUserStore(selectCoins);
+
+  const [noAdsActive, setNoAdsActive] = useState(false);
+  useEffect(() => {
+    hasNoAds().then(setNoAdsActive).catch(() => { /* default false */ });
+  }, []);
 
   const styles = makeStyles(isDark);
 
@@ -119,6 +126,9 @@ export default function HomeScreen() {
           <Text style={styles.quickLabel}>Profil</Text>
         </TouchableOpacity>
       </View>
+
+      {/* ─── Banner Ad ────────────────────────────────────────────────────── */}
+      <AdBanner hideAds={noAdsActive} />
     </ScrollView>
   );
 }

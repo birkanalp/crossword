@@ -198,17 +198,14 @@ export function useLevel(
 /**
  * Fetches today's daily puzzle.
  *
- * NOTE: The backend getDailyChallenge endpoint is Phase 2 (status.backend.md #13).
- * This hook is a placeholder — it will 404 until the endpoint is deployed.
- * TODO: Update path to /getDailyChallenge once CR-003 is resolved.
- *
- * Contract gap: CR-003 in api.contract.json#/changeRequests
+ * Contract: GET /getDailyChallenge
+ * Response: { level: Level, progress: UserProgressSnapshot | null }
+ * (api.contract.json#/endpoints/getDailyChallenge)
  */
 export function useDailyPuzzle(opts?: { guestId?: string; authToken?: string }) {
   return useQuery({
     queryKey: levelKeys.daily(),
     queryFn: async (): Promise<LevelWithProgress> => {
-      // TODO (CR-003): Replace with /getDailyChallenge once endpoint is live
       const requestOpts: { guestId?: string; authToken?: string } = {};
       if (opts?.guestId) requestOpts.guestId = opts.guestId;
       if (opts?.authToken) requestOpts.authToken = opts.authToken;

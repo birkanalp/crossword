@@ -1125,9 +1125,10 @@
     },
 
     "CR-003": {
-      "status": "open",
+      "status": "resolved",
       "raisedBy": "frontend-agent",
       "raisedAt": "2026-02-21",
+      "resolvedAt": "2026-03-13",
       "title": "getDailyChallenge endpoint needed (Phase 2 backlog #13)",
       "description": "The daily puzzle feature is blocked. status.backend.md lists getDailyChallenge as Phase 2 #13. Frontend has a placeholder hook at /getDailyChallenge that returns 404 until deployed. Request: define and implement the endpoint. Proposed contract below.",
       "proposedEndpoint": {

@@ -1,5 +1,0 @@
-{
-  "/api/generate-puzzle/route": "app/api/generate-puzzle/route.js",
-  "/puzzles/page": "app/puzzles/page.js",
-  "/puzzles/[id]/page": "app/puzzles/[id]/page.js"
-}

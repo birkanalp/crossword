@@ -27,7 +27,10 @@
     "tr:ingest": "tsx scripts/tr/ingest-sources.ts",
     "tr:apply:freq": "tsx scripts/tr/apply-frequency.ts",
     "generate:crossword": "tsx scripts/tr/generate-crossword.ts",
-    "generate:one": "docker compose exec db psql -U postgres -d postgres -c \"select * from run_generation_job_once('tr');\""
+    "generate:one": "docker compose exec db psql -U postgres -d postgres -c \"select * from run_generation_job_once('tr');\"",
+    "quality-gate": "bash scripts/quality-gate.sh",
+    "quality-gate:frontend": "bash scripts/quality-gate.sh frontend",
+    "quality-gate:admin": "bash scripts/quality-gate.sh admin"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.45.0",

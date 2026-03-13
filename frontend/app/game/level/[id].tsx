@@ -32,6 +32,7 @@ import {
   selectScoreBreakdown,
 } from '@/store/gameStore';
 import { useLevel, checkWord, revealLetter, isValidLevelId } from '@/api/hooks/useLevels';
+import { useSubmitScore } from '@/api/hooks/useProfile';
 import { useUserStore, selectUser, selectCoins } from '@/store/userStore';
 import { buildCellStates } from '@/components/grid/CrosswordGrid';
 import { useAutoSave } from '@/hooks/useAutoSave';
@@ -75,7 +76,11 @@ export default function LevelScreen() {
   const user = useUserStore(selectUser);
   const coins = useUserStore(selectCoins);
   const guestId: string | undefined = user?.type === 'guest' ? user.guestId : undefined;
-  const authToken: string | undefined = undefined;
+  // JWT from authenticated user — undefined for guests (sign-in not yet implemented)
+  const authToken: string | undefined =
+    user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
+
+  const { mutate: submitScore } = useSubmitScore();
 
   const REVEAL_LETTER_COST = 2;
   const SHOW_HINT_COST = 1;
@@ -221,6 +226,23 @@ export default function LevelScreen() {
       mistakes: gameState.mistakes,
       is_daily: false,
     });
+
+    // ── Submit score to backend (authenticated users only) ──────────────────
+    const currentAuthToken =
+      useUserStore.getState().user?.type === 'authenticated'
+        ? ((useUserStore.getState().user as { jwt?: string }).jwt ?? undefined)
+        : undefined;
+    if (currentAuthToken) {
+      submitScore({
+        levelId: levelData.level.id,
+        clues: levelData.level.clues,
+        filledCells: gameState.filledCells,
+        timeSpent: elapsedTime,
+        hintsUsed: gameState.hintsUsed,
+        mistakes: gameState.mistakes,
+        authToken: currentAuthToken,
+      });
+    }
 
     // Show completion overlay with leaderboard — brief delay lets the correct
     // animation finish before the modal appears.

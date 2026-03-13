@@ -16,6 +16,8 @@ export interface AuthenticatedUser {
   avatarUrl: string | null;
   guestId: string | null; // preserved from guest session for merge
   createdAt: string;
+  /** Supabase access token — set after successful sign-in */
+  jwt?: string;
 }
 
 export type AppUser = GuestUser | AuthenticatedUser;

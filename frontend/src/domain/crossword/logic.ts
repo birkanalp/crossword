@@ -16,7 +16,6 @@ export function cellKey(row: number, col: number): string {
 
 export function parseCellKey(key: string): GridPosition {
   const [row, col] = key.split('-').map(Number);
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return { row: row!, col: col! };
 }
 

@@ -14,7 +14,6 @@ export type RewardedAdResult = { rewarded: boolean };
 
 function getAdMobModule() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     return require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
   } catch {
     return null;

@@ -151,7 +151,6 @@ function build2DGrid(gridJson: ApiGridJson): CellData[][] {
       cellNumber: cell.number ?? null,
       isBlocked: cell.type === 'black',
     };
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     grid[cell.row]![cell.col] = domainCell;
   }
 

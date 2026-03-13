@@ -51,7 +51,5 @@ export function useAutoSave(): void {
       // Final save on unmount (level exit)
       flush();
     };
-    // flush is stable — no deps needed
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

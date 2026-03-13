@@ -44,6 +44,7 @@ function CluesListComponent({ clues, selectedClue, onCluePress, extraBottomPaddi
         () => {},
       );
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClue?.id]);
 
   const styles = makeStyles(isDark);

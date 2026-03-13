@@ -87,7 +87,6 @@ export default function StoreScreen() {
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { default: Purchases } = require('react-native-purchases') as typeof import('react-native-purchases');
       const { customerInfo } = await Purchases.purchasePackage(rcPkg);
 

@@ -48,7 +48,6 @@ export function applyDailyCompletion(current: StreakState): StreakState {
  * Called on app launch if the date has changed.
  */
 export function refreshStreakForNewDay(current: StreakState): StreakState {
-  const today = getTodayDateString();
   const isAlreadyToday = isToday(current.lastClaimedDate ?? '');
   if (isAlreadyToday) return current;
 

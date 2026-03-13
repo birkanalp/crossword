@@ -14,7 +14,6 @@ import {
   findClueForCell,
   resolveDirectionOnCellTap,
   isPuzzleComplete,
-  getWrongCells,
   nextEmptyCellInClue,
   prevCellInClue,
   cellKey,
@@ -173,7 +172,7 @@ export const useGameStore = create<GameState & GameActions>()(
     },
 
     tapCell: (row, col) => {
-      const { currentLevel, selectedCell, direction, filledCells } = get();
+      const { currentLevel, selectedCell, direction } = get();
       if (!currentLevel) return;
 
       const newDirection = resolveDirectionOnCellTap(

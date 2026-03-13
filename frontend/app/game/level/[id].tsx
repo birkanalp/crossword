@@ -170,6 +170,7 @@ export default function LevelScreen() {
     if (selectedClue) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClue?.id]);
 
   useEffect(() => {

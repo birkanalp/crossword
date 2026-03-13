@@ -75,7 +75,6 @@ export function initAnalytics(userId: string): void {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { PostHog } = require('posthog-react-native') as typeof import('posthog-react-native');
     _posthog = new PostHog(apiKey, {
       host,

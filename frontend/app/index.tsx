@@ -6,12 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   useColorScheme,
-  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useUserStore, selectUser, selectStreak, selectCoins } from '@/store/userStore';
 import { Colors } from '@/constants/colors';
-import { formatElapsedTime } from '@/hooks/useElapsedTimer';
 import { AdBanner } from '@/components/ui/AdBanner';
 import { hasNoAds } from '@/lib/revenuecat';
 

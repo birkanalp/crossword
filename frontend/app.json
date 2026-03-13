@@ -80,7 +80,9 @@
       "admobInterstitialIos": "",
       "admobInterstitialAndroid": "",
       "admobRewardedIos": "",
-      "admobRewardedAndroid": ""
+      "admobRewardedAndroid": "",
+      "posthogApiKey": "",
+      "posthogHost": "https://us.i.posthog.com"
     },
     "updates": {
       "fallbackToCacheTimeout": 0,

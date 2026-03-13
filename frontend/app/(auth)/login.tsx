@@ -6,6 +6,10 @@ import { Colors } from '@/constants/colors';
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 // Skeleton only. TODO: Implement Apple/Google sign-in + backend auth flow.
+//
+// When real sign-in is wired up, call `loginWithMerge(user, profile)` from
+// the `useLoginWithMerge` hook INSTEAD of `loginUser` directly — this
+// triggers POST /mergeGuestProgress to carry over guest progress.
 
 export default function LoginScreen() {
   const router = useRouter();

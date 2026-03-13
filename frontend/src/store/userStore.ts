@@ -83,7 +83,9 @@ export const useUserStore = create<UserState & UserActions>()(
     },
 
     loginUser: (user, profile) => {
-      // TODO: Trigger backend guest-merge after login
+      // Guest progress merge is handled by useLoginWithMerge hook —
+      // call that hook's `loginWithMerge()` instead of this action directly
+      // whenever the merge API needs to run (i.e. after Apple/Google sign-in).
       set({ user, profile });
     },
 

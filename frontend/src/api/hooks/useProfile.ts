@@ -16,15 +16,15 @@ export const profileKeys = {
 
 /**
  * Fetches the authenticated user's profile.
- * TODO: No /getProfile endpoint in contract yet — CR-006.
+ * Contract: GET /getProfile (api.contract.json#/endpoints/getProfile)
+ * Requires Bearer JWT — disabled for guests.
  */
-export function useProfile(userId: string | null) {
+export function useProfile(userId: string | null, authToken?: string) {
   return useQuery({
     queryKey: profileKeys.detail(userId ?? ''),
     queryFn: async () => {
       if (!userId) throw new Error('No user ID');
-      // TODO (CR-006): Implement /getProfile endpoint on backend
-      const response = await apiRequest<UserProfile>(`/getProfile?user_id=${userId}`);
+      const response = await apiRequest<UserProfile>('/getProfile', authToken ? { authToken } : {});
       if (response.error) throw new Error(response.error);
       return response.data;
     },

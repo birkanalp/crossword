@@ -166,15 +166,16 @@ export function useLevel(
 
   return useQuery({
     queryKey: levelKeys.detail(levelId ?? ''),
-    queryFn: async (): Promise<LevelWithProgress> => {
+    queryFn: async ({ signal }): Promise<LevelWithProgress> => {
       if (!levelId) throw new Error('No level ID');
       if (!isValidLevelId(levelId)) {
         throw new Error('Geçersiz seviye kimliği. Lütfen seviye listesinden seçin.');
       }
 
-      const requestOpts: { guestId?: string; authToken?: string } = {};
+      const requestOpts: { guestId?: string; authToken?: string; signal?: AbortSignal } = {};
       if (opts?.guestId) requestOpts.guestId = opts.guestId;
       if (opts?.authToken) requestOpts.authToken = opts.authToken;
+      if (signal) requestOpts.signal = signal;
 
       const response = await apiRequest<GetLevelResponse>(
         `/getLevel?id=${encodeURIComponent(levelId)}`,
@@ -205,10 +206,11 @@ export function useLevel(
 export function useDailyPuzzle(opts?: { guestId?: string; authToken?: string }) {
   return useQuery({
     queryKey: levelKeys.daily(),
-    queryFn: async (): Promise<LevelWithProgress> => {
-      const requestOpts: { guestId?: string; authToken?: string } = {};
+    queryFn: async ({ signal }): Promise<LevelWithProgress> => {
+      const requestOpts: { guestId?: string; authToken?: string; signal?: AbortSignal } = {};
       if (opts?.guestId) requestOpts.guestId = opts.guestId;
       if (opts?.authToken) requestOpts.authToken = opts.authToken;
+      if (signal) requestOpts.signal = signal;
 
       const response = await apiRequest<GetLevelResponse>(
         '/getDailyChallenge',
@@ -264,10 +266,11 @@ export function useListLevels(opts?: {
       ...(opts?.hide_completed !== undefined ? { hide_completed: opts.hide_completed } : {}),
       ...(opts?.sort !== undefined ? { sort: opts.sort } : {}),
     }),
-    queryFn: async (): Promise<ListLevelsResponse> => {
-      const requestOpts: { guestId?: string; authToken?: string } = {};
+    queryFn: async ({ signal }): Promise<ListLevelsResponse> => {
+      const requestOpts: { guestId?: string; authToken?: string; signal?: AbortSignal } = {};
       if (opts?.guestId) requestOpts.guestId = opts.guestId;
       if (opts?.authToken) requestOpts.authToken = opts.authToken;
+      if (signal) requestOpts.signal = signal;
 
       const path = query ? `/listLevels?${query}` : '/listLevels';
       const response = await apiRequest<ListLevelsResponse>(path, requestOpts);

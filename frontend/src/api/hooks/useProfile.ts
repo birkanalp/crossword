@@ -22,9 +22,12 @@ export const profileKeys = {
 export function useProfile(userId: string | null, authToken?: string) {
   return useQuery({
     queryKey: profileKeys.detail(userId ?? ''),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!userId) throw new Error('No user ID');
-      const response = await apiRequest<UserProfile>('/getProfile', authToken ? { authToken } : {});
+      const response = await apiRequest<UserProfile>(
+        '/getProfile',
+        { ...(authToken ? { authToken } : {}), signal },
+      );
       if (response.error) throw new Error(response.error);
       return response.data;
     },

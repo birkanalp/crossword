@@ -91,7 +91,7 @@ export function useLeaderboard(params: UseLeaderboardParams) {
 
   return useQuery<LeaderboardResponse, Error>({
     queryKey: leaderboardKeys.list(type, sort_by, level_id, date, limit, page),
-    queryFn: async (): Promise<LeaderboardResponse> => {
+    queryFn: async ({ signal }): Promise<LeaderboardResponse> => {
       const searchParams = new URLSearchParams({
         type,
         sort_by,
@@ -104,9 +104,11 @@ export function useLeaderboard(params: UseLeaderboardParams) {
       const requestOpts: {
         authToken?: string;
         guestId?: string;
+        signal?: AbortSignal;
       } = {};
       if (authToken) requestOpts.authToken = authToken;
       if (guestId) requestOpts.guestId = guestId;
+      if (signal) requestOpts.signal = signal;
 
       const res = await apiRequest<LeaderboardResponse>(
         `/getLeaderboard?${searchParams.toString()}`,

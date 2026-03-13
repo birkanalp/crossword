@@ -11,6 +11,7 @@ import { initSentry } from '@/lib/sentry';
 import { useAppBoot } from '@/hooks/useAppBoot';
 import { setupStoreSubscriptions } from '@/store/storeSubscriptions';
 import { Colors } from '@/constants/colors';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ─── Keep the splash screen visible until boot completes ─────────────────────
 SplashScreen.preventAutoHideAsync();
@@ -25,11 +26,13 @@ setupStoreSubscriptions();
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <QueryClientProvider client={queryClient}>
-        <RootNavigator />
-      </QueryClientProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <QueryClientProvider client={queryClient}>
+          <RootNavigator />
+        </QueryClientProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 

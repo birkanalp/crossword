@@ -56,7 +56,7 @@ import { PuzzleLeaderboard } from '@/components/game/PuzzleLeaderboard';
 import { ProfileSetupModal } from '@/components/ProfileSetupModal';
 import { makeStyles } from '@/components/game/levelScreen.styles';
 import type { GuessRecord } from '@/components/game/types';
-import { showRewardedAd } from '@/lib/admob';
+import { showRewardedAd, showInterstitialAd } from '@/lib/admob';
 import { logAdEvent } from '@/api/adEvents';
 import { normalizeTurkishWord, toTurkishUpper } from '@/utils/turkish';
 import { hasNoAds } from '@/lib/revenuecat';
@@ -242,6 +242,14 @@ export default function LevelScreen() {
         mistakes: gameState.mistakes,
         authToken: currentAuthToken,
       });
+    }
+
+    // Show interstitial ad after level completion (non-premium users only).
+    // The ad loads and shows asynchronously — we don't await it here so that
+    // the completion overlay appears immediately after the interstitial closes
+    // (or right away if the ad fails to load or the user has no_ads entitlement).
+    if (!noAdsActive) {
+      showInterstitialAd().catch(() => { /* fail silently */ });
     }
 
     // Show completion overlay with leaderboard — brief delay lets the correct

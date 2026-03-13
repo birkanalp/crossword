@@ -93,12 +93,59 @@ export async function showRewardedAd(): Promise<RewardedAdResult> {
   });
 }
 
-// ─── Interstitial Ad (placeholder) ───────────────────────────────────────────
+// ─── Interstitial Ad ─────────────────────────────────────────────────────────
+
+function getInterstitialAdUnitId(): string {
+  const mod = getAdMobModule();
+  const fallback = 'ca-app-pub-3940256099942544/4411468910'; // Google test ID
+  if (!mod) return fallback;
+  const { TestIds } = mod;
+  if (__DEV__) return TestIds.INTERSTITIAL;
+  return Platform.select({
+    ios:
+      (Constants.expoConfig?.extra?.admobInterstitialIos as string | undefined) ||
+      TestIds.INTERSTITIAL,
+    android:
+      (Constants.expoConfig?.extra?.admobInterstitialAndroid as string | undefined) ||
+      TestIds.INTERSTITIAL,
+    default: TestIds.INTERSTITIAL,
+  }) as string;
+}
 
 /**
- * Show an interstitial ad. Not yet implemented — placeholder for future use.
+ * Show an interstitial ad after level completion.
+ * Resolves when the ad is dismissed (CLOSED) or if it fails to load/show.
+ * Safe to call without await — errors are swallowed silently.
  */
 export async function showInterstitialAd(): Promise<void> {
-  // TODO: implement when interstitial placement is defined
-  console.log('[AdMob] Interstitial not implemented yet');
+  const mod = getAdMobModule();
+  if (!mod) {
+    console.warn('[AdMob] Native module not available — skipping interstitial ad');
+    return;
+  }
+
+  const { InterstitialAd, AdEventType } = mod;
+
+  return new Promise((resolve) => {
+    const ad = InterstitialAd.createForAdRequest(getInterstitialAdUnitId(), {
+      requestNonPersonalizedAdsOnly: true,
+    });
+
+    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
+      unsubClosed();
+      resolve();
+    });
+
+    const unsubError = ad.addAdEventListener(AdEventType.ERROR, (_error) => {
+      unsubClosed();
+      unsubError();
+      resolve(); // fail silently — don't block the user
+    });
+
+    ad.addAdEventListener(AdEventType.LOADED, () => {
+      ad.show().catch(() => resolve());
+    });
+
+    ad.load();
+  });
 }

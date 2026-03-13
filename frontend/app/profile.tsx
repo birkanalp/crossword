@@ -12,6 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUserStore, selectUser, selectProfile, selectStreak } from '@/store/userStore';
+import {
+  useSettingsStore,
+  selectSoundEnabled,
+  selectHapticsEnabled,
+  selectTheme,
+} from '@/store/settingsStore';
 import { Colors } from '@/constants/colors';
 import { restorePurchases, ENTITLEMENTS } from '@/lib/revenuecat';
 import { apiRequest } from '@/api/client';
@@ -28,6 +34,14 @@ export default function ProfileScreen() {
   const profile = useUserStore(selectProfile);
   const streak = useUserStore(selectStreak);
   const logout = useUserStore((s) => s.logout);
+
+  // ─── Settings store ───────────────────────────────────────────────────────
+  const soundEnabled = useSettingsStore(selectSoundEnabled);
+  const hapticsEnabled = useSettingsStore(selectHapticsEnabled);
+  const currentTheme = useSettingsStore(selectTheme);
+  const setSoundEnabled = useSettingsStore((s) => s.setSoundEnabled);
+  const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
+  const setTheme = useSettingsStore((s) => s.setTheme);
 
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -175,6 +189,51 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ayarlar</Text>
 
+          <ToggleRow
+            icon="🔊"
+            label="Ses Efektleri"
+            value={soundEnabled}
+            onToggle={setSoundEnabled}
+            isDark={isDark}
+          />
+          <ToggleRow
+            icon="📳"
+            label="Titreşim (Haptik)"
+            value={hapticsEnabled}
+            onToggle={setHapticsEnabled}
+            isDark={isDark}
+          />
+
+          {/* Theme picker */}
+          <View style={[themeStyles.container, { backgroundColor: isDark ? Colors.bgDarkSecondary : Colors.bgLightSecondary }]}>
+            <Text style={themeStyles.icon}>🎨</Text>
+            <Text style={[themeStyles.label, { color: isDark ? Colors.textOnDark : Colors.textPrimary }]}>Tema</Text>
+            <View style={themeStyles.buttons}>
+              {THEME_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    themeStyles.btn,
+                    currentTheme === opt.value && themeStyles.btnActive,
+                  ]}
+                  onPress={() => setTheme(opt.value)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    themeStyles.btnText,
+                    currentTheme === opt.value && themeStyles.btnTextActive,
+                  ]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* ─── Purchases Section ───────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Satın Alımlar</Text>
           <SettingsRow
             icon="🔄"
             label="Satın Alımları Geri Yükle"
@@ -308,6 +367,91 @@ const rowStyles = StyleSheet.create({
   icon: { fontSize: 18 },
   label: { flex: 1, fontSize: 15, fontWeight: '500' },
   chevron: { fontSize: 20 },
+});
+
+// ─── ToggleRow ────────────────────────────────────────────────────────────────
+
+function ToggleRow({
+  icon,
+  label,
+  value,
+  onToggle,
+  isDark,
+}: {
+  icon: string;
+  label: string;
+  value: boolean;
+  onToggle: (v: boolean) => void;
+  isDark: boolean;
+}) {
+  const rowBg = isDark ? Colors.bgDarkSecondary : Colors.bgLightSecondary;
+  const labelColor = isDark ? Colors.textOnDark : Colors.textPrimary;
+
+  return (
+    <TouchableOpacity
+      style={[rowStyles.row, { backgroundColor: rowBg }]}
+      onPress={() => onToggle(!value)}
+      activeOpacity={0.7}
+    >
+      <Text style={rowStyles.icon}>{icon}</Text>
+      <Text style={[rowStyles.label, { color: labelColor }]}>{label}</Text>
+      <View style={[toggleStyles.track, value && toggleStyles.trackOn]}>
+        <View style={[toggleStyles.knob, value && toggleStyles.knobOn]} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const toggleStyles = StyleSheet.create({
+  track: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#ccc',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  trackOn: { backgroundColor: Colors.primary },
+  knob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  knobOn: { alignSelf: 'flex-end' },
+});
+
+// ─── Theme picker constants ────────────────────────────────────────────────────
+
+const THEME_OPTIONS: Array<{ value: 'light' | 'dark' | 'system'; label: string }> = [
+  { value: 'light', label: 'Açık' },
+  { value: 'dark', label: 'Koyu' },
+  { value: 'system', label: 'Sistem' },
+];
+
+const themeStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 8,
+    gap: 12,
+  },
+  icon: { fontSize: 18 },
+  label: { flex: 1, fontSize: 15, fontWeight: '500' },
+  buttons: { flexDirection: 'row', gap: 6 },
+  btn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(128,128,128,0.15)',
+  },
+  btnActive: { backgroundColor: Colors.primary },
+  btnText: { fontSize: 12, fontWeight: '600', color: '#888' },
+  btnTextActive: { color: '#fff' },
 });
 
 // ─── Screen styles ─────────────────────────────────────────────────────────────

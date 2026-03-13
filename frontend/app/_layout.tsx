@@ -12,6 +12,7 @@ import { useAppBoot } from '@/hooks/useAppBoot';
 import { setupStoreSubscriptions } from '@/store/storeSubscriptions';
 import { Colors } from '@/constants/colors';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/ui/OfflineBanner';
 
 // ─── Keep the splash screen visible until boot completes ─────────────────────
 SplashScreen.preventAutoHideAsync();
@@ -56,6 +57,7 @@ function RootNavigator() {
 
   return (
     <>
+      <OfflineBanner />
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{

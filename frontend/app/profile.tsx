@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useUserStore, selectUser, selectProfile, selectStreak } from '@/store/userStore';
 import { Colors } from '@/constants/colors';
 import { restorePurchases, ENTITLEMENTS } from '@/lib/revenuecat';
+import { apiRequest } from '@/api/client';
 
 // ─── Profile Screen ───────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export default function ProfileScreen() {
   const logout = useUserStore((s) => s.logout);
 
   const [restoring, setRestoring] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const isGuest = !user || user.type === 'guest';
   const displayName = isGuest ? 'Misafir' : (user as { username: string }).username;
@@ -37,6 +39,47 @@ export default function ProfileScreen() {
   const handleSignIn = () => {
     router.push('/(auth)/login');
   };
+
+  const authToken =
+    user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Hesabı Sil',
+      'Bu işlem geri alınamaz. Tüm ilerleme ve veriler kalıcı olarak silinecek.',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Hesabı Sil',
+          style: 'destructive',
+          onPress: async () => {
+            if (!authToken) {
+              Alert.alert('Hata', 'Bu işlem için giriş yapmanız gerekiyor.');
+              return;
+            }
+            setDeleting(true);
+            try {
+              const result = await apiRequest('/deleteAccount', {
+                method: 'DELETE',
+                authToken,
+              });
+              if (result.error) {
+                Alert.alert('Hata', result.error);
+                return;
+              }
+              logout();
+              router.replace('/');
+              Alert.alert('Hesap Silindi', 'Hesabınız başarıyla silindi.');
+            } catch {
+              Alert.alert('Hata', 'Hesap silinemedi. Lütfen tekrar deneyin.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [authToken, logout, router]);
 
   const handleLogout = useCallback(() => {
     Alert.alert(
@@ -156,6 +199,19 @@ export default function ProfileScreen() {
               onPress={handleLogout}
               isDark={isDark}
               destructive
+            />
+            <SettingsRow
+              icon="🗑️"
+              label="Hesabı Sil"
+              onPress={handleDeleteAccount}
+              disabled={deleting}
+              isDark={isDark}
+              destructive
+              rightContent={
+                deleting ? (
+                  <ActivityIndicator size="small" color={Colors.error} />
+                ) : undefined
+              }
             />
           </View>
         )}

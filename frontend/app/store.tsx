@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,17 @@ import {
   Modal,
   Pressable,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { type PurchasesPackage } from 'react-native-purchases';
 import { useCoinPackages, type CoinPackage } from '@/api/hooks/useCoinPackages';
 import { useUserStore, selectCoins } from '@/store/userStore';
 import { Colors } from '@/constants/colors';
+import { fetchOfferings } from '@/lib/revenuecat';
+import { captureError } from '@/lib/sentry';
 
 // ─── Badge configuration ───────────────────────────────────────────────────────
 
@@ -41,6 +45,19 @@ export default function StoreScreen() {
 
   const [selectedPackage, setSelectedPackage] = useState<CoinPackage | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  // RevenueCat packages loaded once when the store screen mounts
+  const [rcPackages, setRcPackages] = useState<PurchasesPackage[]>([]);
+  const rcLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (rcLoadedRef.current) return;
+    rcLoadedRef.current = true;
+    fetchOfferings()
+      .then(setRcPackages)
+      .catch((err) => captureError(err, { context: 'store_fetchOfferings' }));
+  }, []);
+
+  const addCoins = useUserStore((s) => s.addCoins);
 
   const handlePurchase = useCallback((pkg: CoinPackage) => {
     setSelectedPackage(pkg);
@@ -54,14 +71,56 @@ export default function StoreScreen() {
     if (!selectedPackage) return;
     setPurchasing(true);
 
-    // RevenueCat integration — placeholder until RC is fully wired
-    // TODO: Purchases.purchaseStoreProduct(selectedPackage.revenuecat_product_id)
-    await new Promise<void>((r) => setTimeout(r, 1200));
+    try {
+      // Match the DB coin package to the RevenueCat package by product ID
+      const rcPkg = rcPackages.find(
+        (p) => p.product.identifier === selectedPackage.revenuecat_product_id,
+      );
 
-    setPurchasing(false);
-    setSelectedPackage(null);
-    Alert.alert('Satın Alma Başarılı', `${selectedPackage.coin_amount} coin hesabınıza eklendi!`);
-  }, [selectedPackage]);
+      if (!rcPkg) {
+        // No RC offering matched — RC not configured or package not found
+        // Fall back to a graceful error rather than silently succeeding
+        Alert.alert(
+          'Satın Alma Yapılamıyor',
+          'Bu ürün şu anda satın alınamıyor. Lütfen daha sonra tekrar deneyin.',
+        );
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { default: Purchases } = require('react-native-purchases') as typeof import('react-native-purchases');
+      const { customerInfo } = await Purchases.purchasePackage(rcPkg);
+
+      // Credit coins to local balance on success
+      // Authoritative server credit happens via RevenueCat webhook (verifyPurchase)
+      addCoins(selectedPackage.coin_amount);
+
+      setSelectedPackage(null);
+      Alert.alert(
+        'Satın Alma Başarılı',
+        `${selectedPackage.coin_amount} coin hesabınıza eklendi!`,
+      );
+
+      // Log for debugging in dev
+      if (__DEV__) {
+        console.log('[Store] Purchase success, active entitlements:', Object.keys(customerInfo.entitlements.active));
+      }
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
+      // User cancelled — don't show an error
+      if (error?.code === '1') return;
+      captureError(err instanceof Error ? err : new Error(String(err)), {
+        context: 'store_confirmPurchase',
+        product_id: selectedPackage.revenuecat_product_id,
+      });
+      Alert.alert(
+        'Satın Alma Başarısız',
+        error?.message ?? 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.',
+      );
+    } finally {
+      setPurchasing(false);
+    }
+  }, [selectedPackage, rcPackages, addCoins]);
 
   const styles = makeStyles(isDark);
 
@@ -185,11 +244,13 @@ export default function StoreScreen() {
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                   >
-                    <Text style={styles.modalBuyText}>
-                      {purchasing
-                        ? 'Isleniyor...'
-                        : `${selectedPackage.coin_amount} Coin Satin Al`}
-                    </Text>
+                    {purchasing ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.modalBuyText}>
+                        {`${selectedPackage.coin_amount} Coin Satın Al`}
+                      </Text>
+                    )}
                   </LinearGradient>
                 </TouchableOpacity>
 
@@ -200,7 +261,7 @@ export default function StoreScreen() {
                       { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' },
                     ]}
                   >
-                    Iptal
+                    İptal
                   </Text>
                 </TouchableOpacity>
               </>

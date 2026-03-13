@@ -12,6 +12,7 @@
 import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { isValidUUID, serviceClient } from "../_shared/auth.ts";
 import { toTurkishUpper } from "../_shared/text.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 interface ClueRecord {
   number: number;
@@ -28,6 +29,10 @@ interface CluesJson {
 Deno.serve(async (req: Request): Promise<Response> => {
   const cors = handleCors(req);
   if (cors) return cors;
+
+  // Rate limit: 20 reveals per minute per IP
+  const limited = checkRateLimit(req, { limit: 20, windowMs: 60_000 });
+  if (limited) return limited;
 
   if (req.method !== "POST") {
     return errorResponse("Method not allowed", 405);

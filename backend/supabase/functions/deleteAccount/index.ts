@@ -16,11 +16,16 @@
 
 import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { getCallerIdentity, serviceClient } from "../_shared/auth.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const cors = handleCors(req);
   if (cors) return cors;
+
+  // Rate limit: 3 delete attempts per minute per IP
+  const limited = checkRateLimit(req, { limit: 3, windowMs: 60_000 });
+  if (limited) return limited;
 
   if (req.method !== "DELETE") {
     return errorResponse("Method not allowed. Use DELETE.", 405);

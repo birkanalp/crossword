@@ -21,6 +21,7 @@ import { isValidUUID } from "../_shared/auth.ts";
 import { validateSubmission } from "../_shared/anticheat.ts";
 import { computeScore } from "../_shared/scoring.ts";
 import type { SubmitScoreRequest, SubmitScoreResponse, Difficulty } from "../_shared/types.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 // Coins awarded per completion
 const COINS_PER_COMPLETION: Record<Difficulty, number> = {
@@ -33,6 +34,10 @@ const COINS_PER_COMPLETION: Record<Difficulty, number> = {
 Deno.serve(async (req: Request): Promise<Response> => {
   const cors = handleCors(req);
   if (cors) return cors;
+
+  // Rate limit: 10 score submissions per minute per IP (prevents spam)
+  const limited = checkRateLimit(req, { limit: 10, windowMs: 60_000 });
+  if (limited) return limited;
 
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
 

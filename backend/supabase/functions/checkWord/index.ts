@@ -12,6 +12,7 @@ import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { getCallerIdentity, isValidUUID, serviceClient } from "../_shared/auth.ts";
 import type { CheckWordRequest } from "../_shared/types.ts";
 import { normalizeTurkishWord } from "../_shared/text.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 interface ClueRecord {
   number: number;
@@ -29,6 +30,10 @@ interface CluesJson {
 Deno.serve(async (req: Request): Promise<Response> => {
   const cors = handleCors(req);
   if (cors) return cors;
+
+  // Rate limit: 60 check-word requests per minute per IP
+  const limited = checkRateLimit(req, { limit: 60, windowMs: 60_000 });
+  if (limited) return limited;
 
   if (req.method !== "POST") {
     return errorResponse("Method not allowed", 405);

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- CONTRACTS/db.schema.sql
--- contractVersion: 1.1.6
--- lastUpdated: 2026-02-25
+-- contractVersion: 1.2.0
+-- lastUpdated: 2026-03-02
 -- owner: backend-agent
 -- consumers: frontend-agent
 --
@@ -18,6 +18,7 @@
 
 -- ---------------------------------------------------------------------------
 -- CHANGELOG
+-- 1.2.0  2026-03-02  Added profiles table (public usernames + avatar_color) and display_name column on leaderboard_entries (snapshot at submission). Migration 019.
 -- 1.1.6  2026-02-25  Added admin metrics contract notes (daily_plays, users, paid_users, active_users_15min) using existing tables; no new schema required
 -- 1.1.5  2026-02-25  Added user_answer_history contract surface for checkWord validation persistence/resume auditing
 -- 1.1.4  2026-02-25  Contract sync: clarified levels.clues_json at-rest server-only answer allowance and public response stripping
@@ -208,9 +209,30 @@ CREATE TABLE daily_challenges (
 );
 
 -- ---------------------------------------------------------------------------
+-- profiles
+-- Public user display name and avatar. Readable by all (anon + authenticated).
+-- Writes: authenticated users can insert/update only their own row.
+-- display_name on leaderboard_entries is a snapshot taken at submitScore time
+-- so leaderboard history is not affected by future username changes.
+-- RLS: SELECT (public), INSERT/UPDATE own row only.
+-- Migration: 019_leaderboard_profiles.sql
+-- ---------------------------------------------------------------------------
+CREATE TABLE profiles (
+  id           UUID        NOT NULL,   -- PK (gen_random_uuid())
+  user_id      UUID        NOT NULL,   -- UNIQUE; FK → auth.users(id) ON DELETE CASCADE
+  username     TEXT        NOT NULL,   -- 2-20 chars; unique case-insensitively
+  avatar_color TEXT        NOT NULL,   -- Hex e.g. '#6366F1'; DEFAULT '#6366F1'
+  created_at   TIMESTAMPTZ NOT NULL,
+  updated_at   TIMESTAMPTZ NOT NULL
+);
+
+-- Index note: idx_profiles_username_lower (LOWER(username)) enforces case-insensitive uniqueness.
+
+-- ---------------------------------------------------------------------------
 -- leaderboard_entries
 -- Publicly readable. One entry per (user, level).
 -- Writes are via submitScore Edge Function only.
+-- display_name is snapshotted from profiles.username at submission time.
 -- ---------------------------------------------------------------------------
 CREATE TABLE leaderboard_entries (
   id              UUID        NOT NULL,  -- PK
@@ -220,6 +242,7 @@ CREATE TABLE leaderboard_entries (
   completion_time INT         NOT NULL,  -- Seconds
   hints_used      INT         NOT NULL,
   mistakes        INT         NOT NULL,
+  display_name    TEXT,                  -- Snapshot of profiles.username at submission; nullable (pre-profile legacy)
   created_at      TIMESTAMPTZ NOT NULL
 );
 

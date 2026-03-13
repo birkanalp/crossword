@@ -119,7 +119,7 @@ const FREQUENCY_WEIGHT = 15;
 const CENTRALITY_WEIGHT = 8;
 const BALANCE_WEIGHT = 9;
 const MIN_WORD_LENGTH = 3;
-const MAX_BUILD_ATTEMPTS_PER_GRID = 24;
+const MAX_BUILD_ATTEMPTS_PER_GRID = 48;
 
 function parseArgs(argv: string[]): CliOptions {
   let difficulty: Difficulty | undefined;
@@ -733,7 +733,7 @@ async function persistGeneratedLevel(
        VALUES (
          $1, $2, $3::difficulty_level, $4::difficulty_level, $5, $6, $7, $8,
          $9::jsonb, $10, $11::jsonb, $12::jsonb, $13, $14, TRUE,
-         'pending', $15, FALSE, $16
+         'ai_review', $15, FALSE, $16
        )`,
       [
         levelId,
@@ -872,6 +872,17 @@ async function main(): Promise<void> {
       const dailyDate = options.daily ? ymdFromDate(new Date(Date.now() + i * 86_400_000)) : null;
       const persisted = options.dryRun ? null : await persistGeneratedLevel(client, generated, profile, dailyDate);
       runResults.push({ generated, persisted, dailyDate });
+
+      if (process.env.CRON_TRIGGER_AI_URL && process.env.CRON_SECRET && persisted) {
+        await fetch(process.env.CRON_TRIGGER_AI_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cron-secret": process.env.CRON_SECRET,
+          },
+          body: JSON.stringify({ level_id: persisted.levelId }),
+        }).catch(() => {});
+      }
     }
 
     for (let i = 0; i < runResults.length; i += 1) {
@@ -899,10 +910,11 @@ async function main(): Promise<void> {
 
     if (options.json) {
       const last = runResults[runResults.length - 1]!;
+      const levelIds = runResults.map((r) => r.persisted?.levelId).filter(Boolean) as string[];
       const out: Record<string, unknown> = {
         success: true,
         difficulty: last.generated.targetDifficulty,
-        level_id: last.persisted?.levelId ?? null,
+        ...(options.count > 1 ? { level_ids: levelIds } : { level_id: levelIds[0] ?? null }),
       };
       if (options.dryRun) out.dry_run = true;
       console.log(JSON.stringify(out));

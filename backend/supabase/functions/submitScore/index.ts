@@ -108,6 +108,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     difficulty_multiplier: Number(level.difficulty_multiplier),
     time_spent,
     hints_used,
+    mistakes,
   });
 
   // ── Check existing leaderboard entry ──────────────────────────────────────
@@ -119,6 +120,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
     .maybeSingle();
 
   const isNewBest = !existingEntry || newScore > existingEntry.score;
+
+  // ── Fetch display_name snapshot from profiles ─────────────────────────────
+  // This is a best-effort lookup — if the user has no profile yet, display_name
+  // is stored as null (API layer falls back to 'Anonim').
+  let displayName: string | null = null;
+  if (isNewBest) {
+    const { data: profile } = await db
+      .from("profiles")
+      .select("username")
+      .eq("user_id", userId)
+      .maybeSingle();
+    displayName = profile?.username ?? null;
+  }
 
   // ── Upsert leaderboard entry (only on improvement) ────────────────────────
   if (isNewBest) {
@@ -132,6 +146,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           completion_time: time_spent,
           hints_used:      hints_used,
           mistakes:        mistakes,
+          display_name:    displayName,
         },
         { onConflict: "user_id,level_id" },
       );

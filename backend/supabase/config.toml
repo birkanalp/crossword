@@ -43,8 +43,14 @@ enabled = false
 [functions.getLevel]
 verify_jwt = false   # guests (no JWT) must be able to call this
 
+[functions.listLevels]
+verify_jwt = false   # guests (no JWT) must be able to call this
+
 [functions.submitScore]
 verify_jwt = true    # JWT required; checked inside the function too
 
 [functions.mergeGuestProgress]
 verify_jwt = true    # must be authenticated
+
+[functions.revealLetter]
+verify_jwt = false   # guests (no JWT) must be able to call this

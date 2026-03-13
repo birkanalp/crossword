@@ -182,3 +182,122 @@
   - `api.contract.json` is valid and semver-bumped (`1.1.2`) with `checkWord` optional resume/idempotency fields.
   - `db.schema.sql` (`1.1.5`) aligns with migration `009` for `user_answer_history` surface and RPC/RLS notes.
   - Declared endpoint implementations exist for `getLevel`, `getDailyChallenge`, `checkWord`, `submitScore`, `mergeGuestProgress`.
+
+## 2026-02-26 Contract Guardian Contract Update: AI Review Feature (v1.2.0)
+
+- Action: Targeted contract update applied to `CONTRACTS/api.contract.json` for the AI Review feature. No source code modified.
+- Changes applied:
+  - Bumped `contractVersion` from `1.1.3` to `1.2.0`; updated `lastUpdated` to `2026-02-26`.
+  - Added `1.2.0` changelog entry documenting AI review status, fields, and new endpoint.
+  - Added `"ai_review"` to `endpoints.adminListPuzzles.queryParams.status.enum` (now `ai_review | pending | approved | rejected`).
+  - Added `"ai_review"` to `components.AdminPuzzleSummary.review_status.enum` (now `ai_review | pending | approved | rejected`).
+  - Added `"ai_review"` to `components.AdminLevel.properties.review_status.enum` (now `ai_review | pending | approved | rejected`).
+  - Extended `components.AdminLevel.required` array with `ai_review_notes`, `ai_reviewed_at`, `ai_review_score`.
+  - Added three new property definitions to `components.AdminLevel.properties`: `ai_review_notes` (string | null), `ai_reviewed_at` (string | null, date-time), `ai_review_score` (integer | null, 0-100).
+  - Added new endpoint `adminAiReviewPuzzle`: `POST /admin/puzzles/:id/ai-review` with admin JWT requirement, 200 response shape (`passed`, `score`, `issues`, `feedback`, `review_status`), and error codes `400 | 401 | 403 | 404 | 500 | 503`.
+- This is a minor version bump (1.1.3 -> 1.2.0): new required fields added to `AdminLevel` (breaking for consumers of that component), new enum value added, new endpoint added.
+
+## 2026-02-27 Ad Events System (migration 017 + admin metrics extension)
+
+- Context: Rewarded ad support added. Frontend will log ad lifecycle events (started, completed, skipped, failed) for reveal_letter and show_hint actions.
+- Decision:
+  - Created migration `017_ad_events.sql` with `ad_events` table supporting both authenticated users (`user_id`) and anonymous guests (`guest_id`). Columns: `event_type` (CHECK constraint), `action_type` (CHECK constraint), `level_id` (FK nullable), `ad_unit_id`, `platform`, `created_at`.
+  - RLS: authenticated users can insert their own events and read their own events. Service role bypasses RLS for admin queries.
+  - Indexes: `idx_ad_events_created_at`, `idx_ad_events_user_id`, `idx_ad_events_event_type`, plus a partial index `idx_ad_events_completed_today` on `(event_type, created_at DESC) WHERE event_type = 'completed'` for fast admin metrics queries.
+  - Extended `handleMetricsOverview` in `backend/supabase/functions/admin/index.ts` to query `ad_events` count where `event_type='completed'` and `created_at >= today midnight UTC`, running in parallel with existing queries.
+  - Added `ads_watched_today` (integer, minimum 0) to `adminMetricsOverview` response in `CONTRACTS/api.contract.json`. Now a required field — this is an additive breaking change for admin panel consumers.
+  - Bumped contract version from `1.2.3` to `1.2.4`.
+- Consequence:
+  - Frontend must insert rows directly to `ad_events` via PostgREST (anon/bearer key) when rewarded ads complete — no new edge function needed.
+  - Admin panel must handle the new `ads_watched_today` field in the overview response (non-breaking for display, but the field is now required in the contract).
+  - Migration 017 is safe to re-run (all DDL uses IF NOT EXISTS).
+
+## 2026-03-02 Leaderboard System (migration 019 + getLeaderboard + admin routes + scoring update)
+
+- Context: Frontend leaderboard screen is a placeholder (CR-005). profiles table does not exist; leaderboard_entries lacks display names; no getLeaderboard edge function.
+- Decision:
+  - Created migration `019_leaderboard_profiles.sql`:
+    - New `profiles` table: `user_id` (FK auth.users ON DELETE CASCADE, UNIQUE), `username` (2-20 chars, CHECK constraint), `avatar_color` (hex, default '#6366F1'). Case-insensitive uniqueness enforced via `idx_profiles_username_lower ON (LOWER(username))`.
+    - RLS: `profiles_select_public` (SELECT for all including anon), `profiles_insert_own` (INSERT only own row), `profiles_update_own` (UPDATE only own row).
+    - Added `display_name TEXT` column to `leaderboard_entries` for fast leaderboard display without joining profiles at query time. Null for pre-migration legacy entries — these fall back to 'Anonim' in API responses.
+    - Added leaderboard query indexes: `idx_leaderboard_level_score` (level_id, score DESC), `idx_leaderboard_level_time` (level_id, completion_time ASC), `idx_leaderboard_user_score` (user_id, score DESC), `idx_leaderboard_date_score` (created_at DESC, score DESC).
+  - Updated `_shared/scoring.ts`: added `mistake_penalty = mistakes * 30` to `computeScore`. Formula is now `max(0, base - time*2 - hints*50 - mistakes*30)`.
+  - Updated `_shared/types.ts`: added `mistakes: number` field to `ScoreInput` interface (was already in `SubmitScoreRequest` but missing from `ScoreInput`).
+  - Updated `backend/supabase/functions/submitScore/index.ts`: fetches `profiles.username` before upsert and stores as `display_name` on `leaderboard_entries`. Also passes `mistakes` to `computeScore` now that the field is on `ScoreInput`.
+  - Created `backend/supabase/functions/getLeaderboard/index.ts`: public GET, optional auth. Supports `type=daily|all_time|puzzle`, `sort_by=score|time`, pagination via `page`/`limit`. For `all_time`, aggregates best entry per user in memory (acceptable for current scale; consider a DB view/RPC for large datasets). For `daily`, looks up `daily_challenges` by date and filters by that `level_id` and date window. For `puzzle`, filters directly by `level_id`. Returns `my_entry` when Bearer JWT is valid.
+  - Extended `backend/supabase/functions/admin/index.ts`: added `leaderboard` and `leaderboard/stats` routes to `parseRoute`. `handleAdminLeaderboard` delegates to the same leaderboard logic (shared helper function). `handleAdminLeaderboardStats` runs `COUNT(*)`, `COUNT(DISTINCT user_id)`, `AVG(score)`, `AVG(completion_time)`, and top scorer via `ORDER BY score DESC LIMIT 1` in parallel.
+  - Contract bumped from `1.2.5` to `1.3.0`. New components: `LeaderboardEntry`, `LeaderboardStatsResponse`. New endpoints: `getLeaderboard`, `adminLeaderboard`, `adminLeaderboardStats`. CR-005 resolved.
+- Breaking changes: None for frontend. Scoring formula change (mistake_penalty) will lower scores for submissions with mistakes — this is intentional and anti-cheat aligned.
+- Non-breaking: `display_name` is a new nullable column; old entries show 'Anonim'. `mistakes` in `ScoreInput` is additive.
+- Frontend changes needed:
+  - Implement `GET /functions/v1/getLeaderboard` with `type`, `sort_by`, `level_id`, `page`, `limit` params.
+  - Implement profile creation flow (`POST` to profiles table via PostgREST with anon/bearer key, or a new `createProfile` edge function if input validation is needed).
+  - Display `display_name` and `avatar_color` on leaderboard UI rows.
+  - Admin panel: add leaderboard view at `/admin/leaderboard` and stats widget.
+
+## 2026-03-02 Coin Shop Backend (migration 018 + getCoinPackages + admin CRUD)
+
+- Context: Coin shop feature needs a backend to serve purchasable coin packages to the frontend shop screen and allow admin management.
+- Decision:
+  - Created migration `018_coin_packages.sql` with `coin_packages` table. Columns: `name`, `description`, `coin_amount`, `price_usd`, `original_price_usd`, `discount_percent`, `badge` (CHECK: popular|best_value|new|limited), `is_featured`, `is_active`, `sort_order`, `revenuecat_product_id`, `created_at`, `updated_at`.
+  - RLS: `coin_packages_select_active_public` allows anon+authenticated to read `is_active=true` rows. `coin_packages_service_role_all` grants service_role unrestricted access. Table write path goes exclusively through admin edge function (service client bypasses RLS).
+  - `updated_at` trigger uses existing `fn_set_updated_at()` function from migration 001 (moddatetime is not installed).
+  - Seed: 5 example packages inserted only when table is empty (idempotent guard).
+  - Created `backend/supabase/functions/getCoinPackages/index.ts` — public GET, no auth, returns active packages excluding `is_active`/admin fields.
+  - Extended `backend/supabase/functions/admin/index.ts` with 5 new handlers: `handleListCoinPackages`, `handleCreateCoinPackage`, `handleUpdateCoinPackage`, `handleDeleteCoinPackage`, `handleToggleCoinPackage`. Route dispatch uses `parseRoute` pattern consistent with existing admin routes.
+  - Updated `_shared/cors.ts` to add `PUT` and `DELETE` to `Access-Control-Allow-Methods` — previously only GET/POST/PATCH/OPTIONS were allowed, which would have caused preflight failures for the new admin routes.
+  - Contract bumped from `1.2.4` to `1.2.5`. Added endpoints: `getCoinPackages`, `adminListCoinPackages`, `adminCreateCoinPackage`, `adminUpdateCoinPackage`, `adminDeleteCoinPackage`, `adminToggleCoinPackage`. Added components: `CoinPackage` (public), `CoinPackageAdmin` (full).
+- Non-breaking change: all additions, no existing endpoint or field removed or renamed.
+- Frontend changes needed:
+  - Shop screen: call `GET /functions/v1/getCoinPackages` with anon apikey. No auth header required.
+  - Admin panel: use new `/admin/coin-packages` CRUD routes with admin JWT.
+  - Use `revenuecat_product_id` to initiate RevenueCat purchase flow per package.
+
+## 2026-03-02 Contract Guardian Audit — Coin Shop Feature (v1.2.5)
+
+- Scope: Full cross-file sync check for the coin shop feature across `CONTRACTS/api.contract.json`, `backend/supabase/functions/getCoinPackages/index.ts`, `backend/supabase/functions/admin/index.ts`, `admin/lib/api.ts`, `frontend/src/api/hooks/useCoinPackages.ts`, and `frontend/app/store.tsx`. Migration `018_coin_packages.sql` included for schema alignment.
+- Result: PASS with 1 critical and 1 warning.
+- Critical:
+  - `DELETE /admin/coin-packages/:id` — `CONTRACTS/api.contract.json` declares `404` as a possible error code for this endpoint. The implementation in `backend/supabase/functions/admin/index.ts` (`handleDeleteCoinPackage`, line 759–767) does NOT verify record existence before issuing the DELETE. A delete against a non-existent UUID returns PostgreSQL success (0 rows affected, no error), so the function always responds `204 No Content`. The 404 branch declared in the contract is unreachable. Consumers expecting 404 for missing IDs will receive 204 instead. (Non-breaking for current admin panel which ignores 404 vs 204 distinction, but constitutes a contract fidelity violation.)
+- Warning:
+  - `admin/lib/api.ts` exports `interface CoinPackage` (lines 271–286) that contains `is_active`, `created_at`, and `updated_at` — this is the full admin field set. The contract names this shape `CoinPackageAdmin` (under `components.CoinPackageAdmin`). The contract public shape `components.CoinPackage` excludes those three fields. The admin panel type is semantically `CoinPackageAdmin` but named `CoinPackage`, creating a naming conflict that could mislead future developers reusing the type. Fields themselves are correct; no runtime impact.
+- Passed checks (10):
+  1. `api.contract.json` is valid JSON; `contractVersion` is `1.2.5` (semver valid); all 6 coin shop endpoints declared.
+  2. `getCoinPackages/index.ts` — method GET, no auth, response `{ packages: [] }`, `is_active=true` filter: all match contract.
+  3. `getCoinPackages/index.ts` SELECT projection (11 fields) exactly matches `components.CoinPackage` field set; admin-only fields (`is_active`, `created_at`, `updated_at`) correctly excluded.
+  4. `frontend/src/api/hooks/useCoinPackages.ts` `CoinPackage` interface (11 fields) exactly matches `components.CoinPackage` contract component; `badge` union `'popular'|'best_value'|'new'|'limited'|null` matches contract enum.
+  5. `frontend/app/store.tsx` calls `/getCoinPackages` via the `useCoinPackages` hook; endpoint path is correct.
+  6. `backend/supabase/functions/admin/index.ts` implements all 5 admin routes with correct HTTP methods: GET+POST on `/admin/coin-packages`, PUT+DELETE on `/admin/coin-packages/:id`, PATCH on `/admin/coin-packages/:id/toggle`.
+  7. `admin/lib/api.ts` implements all 5 admin functions (`adminListCoinPackages`, `adminCreateCoinPackage`, `adminUpdateCoinPackage`, `adminDeleteCoinPackage`, `adminToggleCoinPackage`) targeting correct paths and HTTP methods.
+  8. Migration `018_coin_packages.sql` column set matches all `CoinPackageAdmin` fields; types (`TEXT`, `INTEGER`, `NUMERIC(10,2)`, `BOOLEAN`, `TIMESTAMPTZ`), nullability, and `CHECK` constraints are consistent with contract field constraints.
+  9. `badge` CHECK constraint (`popular|best_value|new|limited`) is consistent across migration DDL, backend validation in `handleCreateCoinPackage`/`handleUpdateCoinPackage`, contract enum, and all TypeScript union types.
+  10. `handleToggleCoinPackage` correctly checks for existence via `.single()` before returning, returning 404 for missing IDs — consistent with contract.
+
+## 2026-03-03 Contract Guardian Audit — Leaderboard Feature (v1.3.0)
+
+- Scope: Full post-implementation sync check for the leaderboard system across `CONTRACTS/api.contract.json` (v1.3.0), `CONTRACTS/db.schema.sql` (v1.2.0), `backend/supabase/functions/getLeaderboard/index.ts`, `backend/supabase/functions/admin/index.ts`, `backend/supabase/migrations/019_leaderboard_profiles.sql`, `frontend/src/api/hooks/useLeaderboard.ts`, and `admin/app/leaderboard/page.tsx`.
+- Result: PASS with 1 warning.
+- Warning:
+  - `getLeaderboard/index.ts` always returns `avatar_color: "#6366F1"` (hardcoded constant `DEFAULT_AVATAR_COLOR`, line 23/93) regardless of the user's actual profile color stored in `profiles.avatar_color`. The contract defines `LeaderboardEntry.avatar_color` as the user's profile color. No JOIN or lookup against the `profiles` table occurs in `fetchLeaderboardEntries`. Effect: all avatar circles render with the default indigo color regardless of user customization. Not a breaking change (field is present and is a valid string), but constitutes a contract fidelity gap. The same hardcoding is present in `handleAdminLeaderboard` (line 844 of `admin/index.ts`).
+- Passed checks (10):
+  1. `api.contract.json` contractVersion is `1.3.0` (semver valid); `getLeaderboard`, `adminLeaderboard`, and `adminLeaderboardStats` endpoints are present with correct methods and paths.
+  2. `db.schema.sql` v1.2.0: `profiles` table declared with all 6 columns (`id`, `user_id`, `username`, `avatar_color`, `created_at`, `updated_at`); `leaderboard_entries.display_name` declared as nullable TEXT. Both match `019_leaderboard_profiles.sql` DDL exactly.
+  3. `getLeaderboard/index.ts` response shape `{entries, total, page, my_entry}` matches contract `getLeaderboard.response.200` exactly; `LeaderboardEntry` interface (9 fields) is field-for-field identical to `components.LeaderboardEntry`.
+  4. `admin/index.ts` routes: `leaderboard` (GET `/admin/leaderboard`) and `leaderboardStats` (GET `/admin/leaderboard/stats`) are registered at lines 128–129; routing logic at lines 75–77 is correct.
+  5. `handleAdminLeaderboard` response shape `{entries, total, page, my_entry: null}` matches `adminLeaderboard.response.200`; delegates to `fetchLeaderboardEntries` (shared with public endpoint) — consistent.
+  6. `handleAdminLeaderboardStats` response fields (`total_entries`, `unique_players`, `avg_score`, `avg_completion_time`, `top_scorer`) exactly match `components.LeaderboardStatsResponse` required fields.
+  7. `019_leaderboard_profiles.sql`: `profiles` table, `idx_profiles_username_lower` unique index, RLS policies (`profiles_select_public`, `profiles_insert_own`, `profiles_update_own`), `display_name` column on `leaderboard_entries`, and 4 leaderboard performance indexes — all present and consistent with `db.schema.sql` contract notes.
+  8. `frontend/src/api/hooks/useLeaderboard.ts`: `LeaderboardEntry` interface (9 fields) and `LeaderboardResponse` interface (`entries`, `total`, `page`, `my_entry`) are field-for-field identical to contract. Endpoint path `/getLeaderboard` matches contract. Comment at line 5 explicitly references contract v1.3.0.
+  9. `admin/app/leaderboard/page.tsx`: file exists; calls `/admin/leaderboard` and `/admin/leaderboard/stats`; `LeaderboardEntry` (9 fields) and `LeaderboardStats` (5 fields) local interfaces match contract shapes exactly.
+  10. No breaking changes without version bump detected. `contractVersion` was correctly bumped to `1.3.0` to accompany the new endpoints and schema surfaces.
+
+## 2026-02-26 AI Review: Claude → Ollama Migration
+
+- Context: Replace Anthropic Claude API with local Ollama for puzzle quality review.
+- Decision:
+  - Added `ollama` service to `docker-compose.yml` with init script (`docker/ollama/entrypoint.sh`) that pulls `qwen2.5:3b` on first start.
+  - Updated `backend/supabase/functions/admin/index.ts` to call Ollama `/api/generate` with JSON schema format instead of Claude API.
+  - Replaced `ANTHROPIC_API_KEY` with `OLLAMA_BASE_URL` and `OLLAMA_MODEL` env vars.
+  - Contract `adminAiReviewPuzzle` description updated (Claude → Ollama); API shape unchanged.
+  - Added `docs/OLLAMA_SETUP.md` for setup and troubleshooting.
+- Consequence: No external API key required; AI review runs fully local via Docker.

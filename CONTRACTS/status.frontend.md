@@ -1,6 +1,6 @@
 # Frontend Status
-**contractVersion:** 1.1.3
-**lastUpdated:** 2026-02-25
+**contractVersion:** 1.2.5
+**lastUpdated:** 2026-03-02
 **owner:** frontend-agent
 
 ---
@@ -73,7 +73,7 @@ The frontend has compensated with safe defaults where possible.
 | 31 | Rewarded ad for extra hints | 🔜 Pending | Same |
 | 32 | Level browser screen (paginated) | ✅ In progress | Uses getDailyChallenge; full list blocked by CR-009 (listLevels) |
 | 33 | Leaderboard UI | 🔜 Pending | CR-005 |
-| 34 | Store / paywall UI | 🔜 Pending | RevenueCat offerings |
+| 34 | Store / paywall UI — coin packages screen | ✅ Done | `api.contract.json#/endpoints/getCoinPackages` (contract v1.2.5) |
 | 35 | Word-correct glow animation (Reanimated) | 🔜 Pending | CR-002 (need answer or check endpoint) |
 | 36 | Wrong-answer shake animation | 🔜 Pending | CR-002 |
 | 37 | Sound effects (expo-av) | 🔜 Pending | — |
@@ -113,6 +113,7 @@ Before implementing any screen or hook that touches the API:
 
 | Date | Version | Notes |
 |------|---------|-------|
+| 2026-03-02 | 1.2.5 | Coin shop screen: `app/store.tsx` fully implemented (featured/regular/discount cards, dark mode, bottom-sheet purchase modal). `useCoinPackages` hook wired to GET /getCoinPackages. `expo-linear-gradient ~14.0.0` added to dependencies. RevenueCat purchase step is a placeholder stub. |
 | 2026-02-25 | 1.0.1 | Fixed non-UUID level navigation: home → /game/levels; useLevel UUID guard; level screen error handling + retry. CR-009 listLevels. |
 | 2026-02-21 | 1.0.0 | Phase 1 complete. Initial audit vs. backend contracts. 8 CRs filed. |
 | 2026-02-25 | 1.1.2 | Answer-history + resume: loadLevel accepts full LevelProgress; checkWord sends request_id, state_json, time_spent, hints_used, mistakes; deriveCorrectClueIds for resume; toFilledCells sanitization in adapter. |
@@ -134,7 +135,7 @@ frontend/
 │   │   └── level/[id].tsx           ← Level screen
 │   ├── profile.tsx
 │   ├── leaderboard.tsx              ← placeholder (blocked: CR-005)
-│   └── store.tsx                    ← placeholder
+│   └── store.tsx                    ← coin packages shop (full implementation)
 └── src/
     ├── api/
     │   ├── client.ts                ← Supabase Edge Functions base URL
@@ -144,6 +145,7 @@ frontend/
     │   │   └── scoreAdapter.ts      ← FilledCells → { "1A": "WORD" } format
     │   └── hooks/
     │       ├── useLevels.ts         ← getLevel, getDailyChallenge
+    │       ├── useCoinPackages.ts   ← GET /getCoinPackages (contract v1.2.5)
     │       ├── useLeaderboard.ts    ← placeholder (CR-005)
     │       └── useProfile.ts        ← getProfile (CR-006), submitScore, mergeGuestProgress
     ├── domain/

@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Supabase (Docker)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "-d", "--wait"],
+      "port": 54321
+    },
+    {
+      "name": "Admin Panel",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "admin:dev"],
+      "port": 3001
+    },
+    {
+      "name": "Expo Dev Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "--prefix", "frontend", "start"],
+      "port": 8081
+    }
+  ]
+}

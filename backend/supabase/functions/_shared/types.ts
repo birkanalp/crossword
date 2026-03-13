@@ -102,4 +102,6 @@ export interface ScoreInput {
   difficulty_multiplier: number;
   time_spent: number;
   hints_used: number;
+  /** Number of wrong-cell mistakes made by the player */
+  mistakes: number;
 }

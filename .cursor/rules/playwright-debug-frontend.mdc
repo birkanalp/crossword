@@ -1,0 +1,39 @@
+---
+description: Use Playwright MCP to inspect and verify frontend/mobile issues
+alwaysApply: true
+---
+
+# Playwright Debug Workflow for Frontend & Mobile
+
+When the user reports an issue in the **frontend** (admin panel) or **mobile** app:
+
+1. **Inspect first**: Use Playwright MCP to navigate to the relevant page, take a snapshot, and optionally a screenshot to see what's wrong.
+2. **Verify fix**: After changes are made, use Playwright again to confirm the problem is resolved.
+
+## Target URLs
+
+| App | URL | When available |
+|-----|-----|----------------|
+| Admin panel | `http://localhost:3001` | `npm run admin:dev` |
+| Expo web (mobile UI) | `http://localhost:8081` | `cd frontend && npx expo start --web` |
+
+## Playwright Tools to Use
+
+- `browser_navigate` – Go to the page
+- `browser_snapshot` – Get accessibility tree (structure, refs for interactions)
+- `browser_take_screenshot` – Capture visual state
+- `browser_click`, `browser_type`, `browser_fill_form` – Reproduce the issue or test the fix
+
+## Simulator Limitation
+
+Playwright cannot directly control the **iOS or Android simulator**. For native simulator issues:
+
+- Ask the user to run `expo start --web` so the app is available at `http://localhost:8081` for Playwright inspection, **or**
+- Rely on screenshots/descriptions the user provides.
+
+## Flow
+
+1. User: "X is broken on the puzzles page"
+2. Navigate → snapshot → screenshot to see the issue
+3. Delegate fix to frontend-core-agent (or implement per orchestrator rules)
+4. Navigate again → snapshot → screenshot to verify the fix

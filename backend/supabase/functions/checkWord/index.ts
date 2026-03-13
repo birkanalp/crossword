@@ -11,6 +11,7 @@
 import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { getCallerIdentity, isValidUUID, serviceClient } from "../_shared/auth.ts";
 import type { CheckWordRequest } from "../_shared/types.ts";
+import { normalizeTurkishWord } from "../_shared/text.ts";
 
 interface ClueRecord {
   number: number;
@@ -90,8 +91,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return errorResponse("Clue not found", 404);
   }
 
-  const normalizedWord = word.trim().toUpperCase();
-  const correct = clue.answer.trim().toUpperCase() === normalizedWord;
+  const normalizedWord = normalizeTurkishWord(word);
+  const correct = normalizeTurkishWord(clue.answer) === normalizedWord;
 
   if ((identity.userId || identity.guestId) && clue.start) {
     const ownerColumn = identity.userId ? "user_id" : "guest_id";
@@ -138,7 +139,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (persistError) {
       console.error("[checkWord] Failed to persist check result:", persistError);
-      return errorResponse("Failed to persist progress", 500);
     }
   }
 

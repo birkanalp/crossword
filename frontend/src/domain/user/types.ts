@@ -31,6 +31,10 @@ export interface UserProfile {
   lastActiveDate: string; // YYYY-MM-DD
   isPremium: boolean;
   rank: number | null;
+  /** Set after the user completes ProfileSetupModal (leaderboard display name) */
+  username?: string;
+  /** Hex colour chosen in ProfileSetupModal, e.g. "#6366F1" */
+  avatarColor?: string;
 }
 
 // ─── Streak Types ─────────────────────────────────────────────────────────────

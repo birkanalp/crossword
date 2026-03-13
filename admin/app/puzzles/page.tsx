@@ -2,203 +2,413 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminListPuzzles, adminGeneratePuzzle, type AdminPuzzleSummary, type GeneratePuzzleDifficulty } from '@/lib/api';
+import { adminListPuzzles, adminGeneratePuzzle, adminGetCronEnabled, adminSetCronEnabled, adminTriggerAiReview, adminStartAllAiReview, adminGetAiReviewCronEnabled, adminSetAiReviewCronEnabled, type AdminPuzzleSummary, type GeneratePuzzleDifficulty } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
+import { Spinner } from '@/components/ui/Spinner';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
 
 const DIFFICULTIES: GeneratePuzzleDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
+const DIFFICULTY_LABELS: Record<GeneratePuzzleDifficulty, string> = {
+  easy: 'Kolay', medium: 'Orta', hard: 'Zor', expert: 'Uzman',
+};
+
+type StatusFilter = 'ai_review' | 'pending' | 'approved' | 'rejected';
+const STATUS_TABS: { key: StatusFilter; label: string }[] = [
+  { key: 'ai_review', label: 'YZ İnceliyor' },
+  { key: 'pending', label: 'Onay bekleyen' },
+  { key: 'approved', label: 'Onaylı' },
+  { key: 'rejected', label: 'Reddedilen' },
+];
 
 export default function PuzzlesPage() {
-  const router = useRouter();
   const { token } = useAuth();
   const [items, setItems] = useState<AdminPuzzleSummary[]>([]);
   const [total, setTotal] = useState(0);
-  const [status, setStatus] = useState<string>('pending');
+  const [status, setStatus] = useState<StatusFilter>('ai_review');
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [generateDifficulty, setGenerateDifficulty] = useState<GeneratePuzzleDifficulty>('medium');
+  const [generateCount, setGenerateCount] = useState(1);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [cronEnabled, setCronEnabled] = useState<boolean | null>(null);
+  const [cronToggling, setCronToggling] = useState(false);
+  const [cronError, setCronError] = useState<string | null>(null);
+  const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  const [aiReviewCronEnabled, setAiReviewCronEnabled] = useState<boolean | null>(null);
+  const [aiReviewCronToggling, setAiReviewCronToggling] = useState(false);
+  const [startingAll, setStartingAll] = useState(false);
+  const [startAllResult, setStartAllResult] = useState<string | null>(null);
+
+  const loadCronStatus = useCallback(() => {
+    if (!token) return;
+    setCronError(null);
+    adminGetCronEnabled(token).then(({ data, error }) => {
+      if (error) setCronError(error);
+      else if (data) setCronEnabled(data.enabled);
+    });
+    adminGetAiReviewCronEnabled(token).then(({ data }) => {
+      if (data) setAiReviewCronEnabled(data.enabled);
+    });
+  }, [token]);
+
+  useEffect(() => { loadCronStatus(); }, [loadCronStatus]);
+
+  const handleCronToggle = async () => {
+    if (!token || cronToggling || cronEnabled === null) return;
+    setCronError(null);
+    const nextEnabled = !cronEnabled;
+    setCronEnabled(nextEnabled);
+    setCronToggling(true);
+    const { data, error } = await adminSetCronEnabled(token, nextEnabled);
+    setCronToggling(false);
+    if (error) {
+      setCronEnabled(cronEnabled);
+      setCronError(error);
+    } else if (data) {
+      setCronEnabled(data.enabled);
+    }
+  };
 
   const loadPuzzles = useCallback(() => {
     if (!token) return;
     setLoading(true);
-    adminListPuzzles(token, { status: status || undefined, page, limit: 20 }).then(
-      ({ data, error: err }) => {
-        setLoading(false);
-        if (err) setError(err);
-        else if (data) {
-          setItems(data.items);
-          setTotal(data.total);
-        }
-      }
-    );
+    adminListPuzzles(token, { status, page, limit: 20 }).then(({ data, error: err }) => {
+      setLoading(false);
+      if (err) setError(err);
+      else if (data) { setItems(data.items); setTotal(data.total); }
+    });
   }, [token, status, page]);
 
-  useEffect(() => {
-    loadPuzzles();
-  }, [loadPuzzles]);
+  useEffect(() => { loadPuzzles(); }, [loadPuzzles]);
 
   const handleGenerate = async () => {
     if (!token || generating) return;
     setGenerating(true);
     setGenerateError(null);
-    const { data, error: err } = await adminGeneratePuzzle(token, generateDifficulty);
+    const { data, error: err } = await adminGeneratePuzzle(token, generateDifficulty, generateCount);
     setGenerating(false);
-    if (err) {
-      setGenerateError(err);
-      return;
-    }
-    if (data?.level_id) {
+    if (err) { setGenerateError(err); return; }
+    if (data) {
       loadPuzzles();
-      router.push(`/puzzles/${data.level_id}`);
+      setSidebarOpen(false);
+      // Batch mode (202): no level_ids yet, puzzles appear as script generates
+      if (data.accepted) {
+        // Poll list so new puzzles appear as they're created
+        const interval = setInterval(loadPuzzles, 5000);
+        setTimeout(() => clearInterval(interval), 120000);
+      }
+      // No redirect — user stays on list, sees new puzzles via loadPuzzles / polling
     }
   };
 
-  if (error) {
-    return <p style={{ color: '#f87171' }}>{error}</p>;
-  }
+  const handleAiReviewCronToggle = async () => {
+    if (!token || aiReviewCronToggling || aiReviewCronEnabled === null) return;
+    const nextEnabled = !aiReviewCronEnabled;
+    setAiReviewCronEnabled(nextEnabled);
+    setAiReviewCronToggling(true);
+    const { data, error } = await adminSetAiReviewCronEnabled(token, nextEnabled);
+    setAiReviewCronToggling(false);
+    if (error) {
+      setAiReviewCronEnabled(aiReviewCronEnabled);
+      setError(error);
+    } else if (data) {
+      setAiReviewCronEnabled(data.enabled);
+    }
+  };
+
+  const handleStartAllAiReview = async () => {
+    if (!token || startingAll) return;
+    setStartingAll(true);
+    setStartAllResult(null);
+    setError(null);
+    const { data, error: err } = await adminStartAllAiReview(token);
+    setStartingAll(false);
+    if (err) { setError(err); return; }
+    if (data) {
+      setStartAllResult(`${data.updated} bulmaca incelemeye alındı`);
+      loadPuzzles();
+    }
+  };
+
+  const handleTriggerAiReview = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!token || triggeringId) return;
+    setTriggeringId(id);
+    const { error } = await adminTriggerAiReview(token, id);
+    setTriggeringId(null);
+    if (!error) loadPuzzles();
+  };
+
+  const totalPages = Math.ceil(total / 20);
 
   return (
-    <div>
-      <h1 style={{ marginBottom: 24 }}>Bulmacalar</h1>
-      <div style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-        <span>Yeni bulmaca:</span>
-        <select
-          value={generateDifficulty}
-          onChange={(e) => setGenerateDifficulty(e.target.value as GeneratePuzzleDifficulty)}
-          disabled={generating}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #444',
-            background: '#1a1a22',
-            color: '#e8e8ed',
-          }}
-        >
-          {DIFFICULTIES.map((d) => (
-            <option key={d} value={d}>
-              {d === 'easy' ? 'Kolay' : d === 'medium' ? 'Orta' : d === 'hard' ? 'Zor' : 'Uzman'}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 8,
-            border: '1px solid #6b9fff',
-            background: '#1e3a5f',
-            color: '#6b9fff',
-            cursor: generating ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {generating ? 'Oluşturuluyor...' : 'Oluştur'}
-        </button>
-        {generateError && (
-          <span style={{ color: '#f87171', fontSize: 14 }}>{generateError}</span>
-        )}
-      </div>
-      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span>Durum:</span>
-        {(['pending', 'approved', 'rejected'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => { setStatus(s); setPage(1); }}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: status === s ? '1px solid #6b9fff' : '1px solid #444',
-              background: status === s ? '#1e3a5f' : 'transparent',
-              color: status === s ? '#6b9fff' : '#a0a0b0',
-            }}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary">Bulmacalar</h1>
+          <p className="text-sm text-text-secondary mt-1">{total} bulmaca</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {cronError && (
+            <span className="text-error text-sm" title={cronError}>Cron: {cronError}</span>
+          )}
+          {startAllResult && (
+            <span className="text-success text-sm">{startAllResult}</span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCronToggle}
+            disabled={cronToggling || cronEnabled === null}
+            title={cronEnabled ? 'Otomatik bulmaca üretimi açık. Tıklayarak kapat.' : 'Otomatik bulmaca üretimi kapalı. Tıklayarak aç.'}
+            className={`flex items-center gap-2 ${cronEnabled ? 'text-success' : 'text-text-tertiary'}`}
           >
-            {s === 'pending' ? 'Onay bekleyen' : s === 'approved' ? 'Onaylı' : 'Reddedilen'}
+            {cronToggling ? (
+              <Spinner className="w-4 h-4" />
+            ) : cronEnabled ? (
+              <>● Cron: Aktif</>
+            ) : (
+              <>○ Cron: Pasif</>
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleAiReviewCronToggle}
+            disabled={aiReviewCronToggling || aiReviewCronEnabled === null}
+            title={aiReviewCronEnabled ? 'YZ inceleme cron\'u açık. Tıklayarak kapat.' : 'YZ inceleme cron\'u kapalı. Tıklayarak aç.'}
+            className={`flex items-center gap-2 ${aiReviewCronEnabled ? 'text-success' : 'text-text-tertiary'}`}
+          >
+            {aiReviewCronToggling ? (
+              <Spinner className="w-4 h-4" />
+            ) : aiReviewCronEnabled ? (
+              <>● YZ Cron: Aktif</>
+            ) : (
+              <>○ YZ Cron: Pasif</>
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleStartAllAiReview}
+            disabled={startingAll}
+            title="Tüm bekleyen bulmacaları YZ incelemesine gönder"
+          >
+            {startingAll ? (
+              <><Spinner className="w-4 h-4" /> Gönderiliyor...</>
+            ) : (
+              'Tümünü YZ\'ye Gönder'
+            )}
+          </Button>
+          <Button variant="ghost" onClick={() => setSidebarOpen(true)}>
+            + Yeni Bulmaca
+          </Button>
+        </div>
+      </div>
+
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40 transition-opacity duration-200 ease-out"
+            aria-hidden="true"
+            onClick={() => {
+              if (!generating) {
+                setSidebarOpen(false);
+                setGenerateError(null);
+              }
+            }}
+          />
+          <aside
+            className="fixed top-0 right-0 h-full w-[320px] bg-bg-surface border-l border-border z-50 shadow-xl flex flex-col animate-slide-in-right"
+          >
+            <div className="p-6 flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-text-primary">Yeni Bulmaca Üret</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!generating) {
+                      setSidebarOpen(false);
+                      setGenerateError(null);
+                    }
+                  }}
+                  className="text-text-tertiary hover:text-text-primary p-1 rounded transition-colors"
+                  aria-label="Kapat"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="text-sm text-text-secondary mb-3">Zorluk</p>
+                  <div className="flex flex-col gap-2">
+                    {DIFFICULTIES.map((d) => (
+                      <label
+                        key={d}
+                        className={`flex items-center gap-3 cursor-pointer py-2 px-3 rounded-lg border bg-[#1a1a22] hover:bg-bg-elevated transition-colors ${
+                          generateDifficulty === d ? 'border-accent ring-1 ring-accent' : 'border-[#333]'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="difficulty"
+                          value={d}
+                          checked={generateDifficulty === d}
+                          onChange={() => setGenerateDifficulty(d)}
+                          disabled={generating}
+                          className="w-4 h-4 accent-accent"
+                        />
+                        <span className="text-sm text-text-primary">{DIFFICULTY_LABELS[d]}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <Input
+                  label="Kaç adet üretilecek?"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={String(generateCount)}
+                  onChange={(e) => {
+                    const v = Math.floor(Number(e.target.value));
+                    if (!Number.isNaN(v)) setGenerateCount(Math.min(100, Math.max(1, v)));
+                  }}
+                  disabled={generating}
+                />
+
+                {generateError && (
+                  <div className="px-3 py-2 rounded-lg bg-error-bg border border-error-border text-error text-sm">
+                    {generateError}
+                  </div>
+                )}
+
+                <Button
+                  variant="primary"
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="w-full"
+                >
+                  {generating ? (
+                    <>
+                      <Spinner className="w-4 h-4" />
+                      Oluşturuluyor...
+                    </>
+                  ) : (
+                    'Üret'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {error && (
+        <div className="px-4 py-3 rounded-lg bg-error-bg border border-error-border text-error text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Status tabs */}
+      <div className="flex gap-1 border-b border-border">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { setStatus(tab.key); setPage(1); }}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 -mb-px ${
+              status === tab.key
+                ? 'border-accent text-accent'
+                : 'border-transparent text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {tab.label}
           </button>
         ))}
       </div>
+
+      {/* List */}
       {loading ? (
-        <p>Yükleniyor...</p>
+        <div className="flex justify-center py-16">
+          <Spinner className="w-8 h-8" />
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState title="Bulmaca bulunamadı" description="Bu kategoride henüz bulmaca yok." />
       ) : (
-        <>
-          <p style={{ marginBottom: 16, color: '#a0a0b0' }}>
-            Toplam {total} bulmaca
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Card>
+          <div className="divide-y divide-border">
+            {/* Table header */}
+            <div className="grid grid-cols-6 px-4 py-3 bg-bg-elevated text-xs font-semibold text-text-secondary uppercase tracking-wide rounded-t-xl">
+              <span>ID</span>
+              <span>Zorluk</span>
+              <span>Dil</span>
+              <span>Durum</span>
+              <span>AI İnceleme</span>
+              <span>Tarih</span>
+            </div>
             {items.map((p) => (
               <Link
                 key={p.id}
                 href={`/puzzles/${p.id}`}
-                style={{
-                  padding: 16,
-                  borderRadius: 8,
-                  background: '#1a1a22',
-                  border: '1px solid #2a2a35',
-                  color: '#e8e8ed',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
+                className="grid grid-cols-6 px-4 py-3.5 hover:bg-bg-elevated transition-colors items-center text-sm"
               >
-                <span>{p.id.slice(0, 8)}...</span>
-                <span>{p.difficulty}</span>
-                <span>{p.language}</span>
-                <span
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 6,
-                    background:
-                      p.review_status === 'pending'
-                        ? '#3d3d00'
-                        : p.review_status === 'approved'
-                        ? '#0d3d0d'
-                        : '#3d0d0d',
-                  }}
-                >
-                  {p.review_status}
+                <span className="font-mono text-accent text-xs">{p.id.slice(0, 8)}&hellip;</span>
+                <span className="text-text-secondary">{DIFFICULTY_LABELS[p.difficulty as GeneratePuzzleDifficulty] ?? p.difficulty}</span>
+                <span className="text-text-secondary uppercase text-xs">{p.language}</span>
+                <span><Badge status={p.review_status as 'ai_review' | 'pending' | 'approved' | 'rejected'} /></span>
+                <span className="text-text-secondary text-xs">
+                  {p.ai_reviewed_at === null ? (
+                    p.review_status === 'ai_review' ? (
+                      'İnceleniyor'
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => handleTriggerAiReview(e, p.id)}
+                        disabled={!!triggeringId}
+                        className="text-accent hover:underline disabled:opacity-50"
+                      >
+                        {triggeringId === p.id ? <Spinner className="w-4 h-4 inline" /> : 'Başlat'}
+                      </button>
+                    )
+                  ) : (
+                    'Tamamlandı'
+                  )}
                 </span>
-                <span style={{ fontSize: 12, color: '#a0a0b0' }}>
+                <span className="text-text-tertiary text-xs">
                   {new Date(p.created_at).toLocaleDateString('tr-TR')}
                 </span>
               </Link>
             ))}
           </div>
-          {total > 20 && (
-            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: '1px solid #444',
-                  background: 'transparent',
-                  color: '#a0a0b0',
-                }}
-              >
-                Önceki
-              </button>
-              <span style={{ alignSelf: 'center' }}>
-                Sayfa {page} / {Math.ceil(total / 20)}
-              </span>
-              <button
-                disabled={page >= Math.ceil(total / 20)}
-                onClick={() => setPage((p) => p + 1)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: '1px solid #444',
-                  background: 'transparent',
-                  color: '#a0a0b0',
-                }}
-              >
-                Sonraki
-              </button>
-            </div>
-          )}
-        </>
+        </Card>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-text-secondary">
+            Sayfa {page} / {totalPages}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              &larr; Önceki
+            </Button>
+            <Button size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              Sonraki &rarr;
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

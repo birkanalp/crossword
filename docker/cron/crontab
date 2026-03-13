@@ -1,0 +1,9 @@
+# Bulmaca puzzle generation – app_settings.puzzle_generation_cron_enabled ile aç/kapa
+# Her 5 dakika: rastgele zorluk, 1 bulmaca
+*/5 * * * * cd /app && npx tsx scripts/cron/run-if-enabled.ts npx tsx scripts/tr/generate-crossword.ts --count 1 --json >> /var/log/cron-generate.log 2>&1
+
+# Günlük bulmaca: her gün 00:00, hard veya expert (rastgele)
+0 0 * * * cd /app && npx tsx scripts/cron/run-if-enabled.ts sh /app/docker/cron/run-daily.sh >> /var/log/cron-daily.log 2>&1
+
+# YZ inceleme cron: her gün 03:00'de bekleyen bulmacaları kontrol et ve işle
+0 3 * * * cd /app && npx tsx scripts/cron/trigger-ai-reviews.ts >> /var/log/ai-review-cron.log 2>&1

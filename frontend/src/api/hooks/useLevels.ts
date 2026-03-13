@@ -25,13 +25,18 @@ export interface CheckWordOptions {
   mistakes?: number;
 }
 
+export interface CheckWordResult {
+  correct: boolean;
+  error: string | null;
+}
+
 export async function checkWord(
   levelId: string,
   clueNumber: number,
   direction: 'across' | 'down',
   word: string,
   opts?: CheckWordOptions,
-): Promise<boolean> {
+): Promise<CheckWordResult> {
   const body: Record<string, unknown> = {
     level_id: levelId,
     clue_number: clueNumber,
@@ -52,8 +57,37 @@ export async function checkWord(
   if (opts?.authToken) requestOpts.authToken = opts.authToken;
 
   const response = await apiRequest<{ correct: boolean }>('/checkWord', requestOpts);
-  if (response.error || !response.data) return false;
-  return response.data.correct;
+  if (response.error || !response.data) {
+    return { correct: false, error: response.error ?? 'Kelime doğrulanamadı.' };
+  }
+  return { correct: response.data.correct, error: null };
+}
+
+// ─── revealLetter ───────────────────────────────────────────────────────────────
+// POST /revealLetter — returns single letter for hint flow (rewarded ad / coin spend).
+// Backend has answers; client never receives full clues.
+
+export interface RevealLetterOptions {
+  guestId?: string;
+  authToken?: string;
+}
+
+export async function revealLetter(
+  levelId: string,
+  row: number,
+  col: number,
+  opts?: RevealLetterOptions,
+): Promise<{ letter: string } | null> {
+  const requestOpts: { method: 'POST'; body: Record<string, unknown>; guestId?: string; authToken?: string } = {
+    method: 'POST',
+    body: { level_id: levelId, row, col },
+  };
+  if (opts?.guestId) requestOpts.guestId = opts.guestId;
+  if (opts?.authToken) requestOpts.authToken = opts.authToken;
+
+  const response = await apiRequest<{ letter: string }>('/revealLetter', requestOpts);
+  if (response.error || !response.data?.letter) return null;
+  return response.data;
 }
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
@@ -62,6 +96,22 @@ export const levelKeys = {
   all: ['levels'] as const,
   detail: (id: string) => [...levelKeys.all, 'detail', id] as const,
   daily: () => [...levelKeys.all, 'daily'] as const,
+  list: (opts?: {
+    difficulty?: string;
+    difficulties?: string[];
+    offset?: number;
+    hide_completed?: boolean;
+    sort?: string;
+  }) =>
+    [
+      ...levelKeys.all,
+      'list',
+      opts?.difficulty ?? 'all',
+      opts?.difficulties?.join(',') ?? '',
+      opts?.offset ?? 0,
+      opts?.hide_completed ?? false,
+      opts?.sort ?? '',
+    ] as const,
 };
 
 // ─── Return Types ─────────────────────────────────────────────────────────────
@@ -69,6 +119,22 @@ export const levelKeys = {
 export interface LevelWithProgress {
   level: CrosswordLevel;
   progress: LevelProgress | null;
+}
+
+/** listLevels response item — api.contract.json#/endpoints/listLevels */
+export interface LevelSummary {
+  id: string;
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
+  is_premium: boolean;
+  progress: {
+    completed_at: string | null;
+    time_spent: number;
+  } | null;
+}
+
+export interface ListLevelsResponse {
+  levels: LevelSummary[];
+  total: number;
 }
 
 // ─── UUID validation ─────────────────────────────────────────────────────────
@@ -164,5 +230,55 @@ export function useDailyPuzzle(opts?: { guestId?: string; authToken?: string }) 
       };
     },
     staleTime: 60 * 60 * 1000, // 1 hour — daily puzzle won't change mid-day
+  });
+}
+
+/**
+ * Fetches paginated list of approved levels with caller's progress.
+ *
+ * Contract: GET /listLevels?difficulty=&difficulties=&hide_completed=&sort=&limit=&offset=
+ * Response: { levels: LevelSummary[], total }
+ * (api.contract.json#/endpoints/listLevels)
+ */
+export function useListLevels(opts?: {
+  guestId?: string;
+  authToken?: string;
+  difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
+  difficulties?: ('easy' | 'medium' | 'hard' | 'expert')[];
+  hide_completed?: boolean;
+  sort?: 'last_completed_first';
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.difficulty) params.set('difficulty', opts.difficulty);
+  if (opts?.difficulties?.length) params.set('difficulties', opts.difficulties.join(','));
+  if (opts?.hide_completed) params.set('hide_completed', 'true');
+  if (opts?.sort) params.set('sort', opts.sort);
+  if (opts?.limit !== undefined) params.set('limit', String(opts.limit));
+  if (opts?.offset !== undefined) params.set('offset', String(opts.offset));
+  const query = params.toString();
+
+  return useQuery({
+    queryKey: levelKeys.list({
+      ...(opts?.difficulty !== undefined ? { difficulty: opts.difficulty } : {}),
+      ...(opts?.difficulties !== undefined ? { difficulties: opts.difficulties } : {}),
+      offset: opts?.offset ?? 0,
+      ...(opts?.hide_completed !== undefined ? { hide_completed: opts.hide_completed } : {}),
+      ...(opts?.sort !== undefined ? { sort: opts.sort } : {}),
+    }),
+    queryFn: async (): Promise<ListLevelsResponse> => {
+      const requestOpts: { guestId?: string; authToken?: string } = {};
+      if (opts?.guestId) requestOpts.guestId = opts.guestId;
+      if (opts?.authToken) requestOpts.authToken = opts.authToken;
+
+      const path = query ? `/listLevels?${query}` : '/listLevels';
+      const response = await apiRequest<ListLevelsResponse>(path, requestOpts);
+
+      if (response.error || !response.data) {
+        throw new Error(response.error ?? 'Seviyeler yüklenemedi');
+      }
+      return response.data;
+    },
   });
 }

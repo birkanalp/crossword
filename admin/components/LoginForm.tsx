@@ -2,11 +2,14 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 export default function LoginForm() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,56 +23,51 @@ export default function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>E-posta</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{
-            width: '100%',
-            padding: 10,
-            borderRadius: 8,
-            border: '1px solid #333',
-            background: '#1a1a22',
-            color: '#e8e8ed',
-          }}
-        />
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <Input
+        label="E-posta"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="admin@bulmaca.local"
+        required
+        autoComplete="email"
+      />
+      <div className="flex flex-col gap-1">
+        <label className="text-sm text-text-secondary">Şifre</label>
+        <div className="relative">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            className="w-full px-3 py-2.5 pr-10 rounded-lg border border-[#333] bg-bg-surface text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent focus:border-border-focus transition-colors duration-150"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
+            aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
+          >
+            {showPassword ? '🙈' : '👁️'}
+          </button>
+        </div>
       </div>
-      <div>
-        <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Şifre</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{
-            width: '100%',
-            padding: 10,
-            borderRadius: 8,
-            border: '1px solid #333',
-            background: '#1a1a22',
-            color: '#e8e8ed',
-          }}
-        />
-      </div>
-      {error && <p style={{ color: '#f87171', fontSize: 14 }}>{error}</p>}
-      <button
+      {error && (
+        <div className="px-3 py-2 rounded-lg bg-error-bg border border-error-border text-error text-sm">
+          {error}
+        </div>
+      )}
+      <Button
         type="submit"
+        variant="primary"
+        size="lg"
         disabled={loading}
-        style={{
-          padding: 12,
-          borderRadius: 8,
-          border: 'none',
-          background: '#6b9fff',
-          color: '#fff',
-          fontWeight: 600,
-        }}
+        className="w-full mt-2"
       >
         {loading ? 'Giriş yapılıyor...' : 'Giriş yap'}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -13,6 +13,8 @@ interface LevelTopBarProps {
   sidebarOpen: boolean;
   onBack: () => void;
   onToggleSidebar: () => void;
+  /** Optional — when provided a trophy button is shown in the top bar */
+  onLeaderboard?: () => void;
   styles: LevelScreenStyles;
 }
 
@@ -23,6 +25,7 @@ export function LevelTopBar({
   sidebarOpen,
   onBack,
   onToggleSidebar,
+  onLeaderboard,
   styles,
 }: LevelTopBarProps) {
   const iconColor = sidebarOpen
@@ -39,6 +42,16 @@ export function LevelTopBar({
       <View style={styles.coinBadge}>
         <Text style={styles.coinBadgeText}>{coins}</Text>
       </View>
+      {/* Trophy button — only rendered when a handler is provided */}
+      {onLeaderboard && (
+        <TouchableOpacity
+          onPress={onLeaderboard}
+          style={styles.sidebarToggleBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+        >
+          <Text style={{ fontSize: 18 }}>🏆</Text>
+        </TouchableOpacity>
+      )}
       <View style={{ position: 'relative' }}>
         <TouchableOpacity onPress={onToggleSidebar} style={styles.sidebarToggleBtn}>
           <MaterialCommunityIcons

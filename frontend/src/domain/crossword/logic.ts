@@ -6,6 +6,7 @@ import type {
   Direction,
   CellData,
 } from './types';
+import { toTurkishUpper } from '@/utils/turkish';
 
 // ─── Cell Helpers ─────────────────────────────────────────────────────────────
 
@@ -119,7 +120,10 @@ export function isClueCorrect(clue: Clue, filledCells: FilledCells): boolean {
   return cells.every((pos, index) => {
     const filled = filledCells[cellKey(pos.row, pos.col)];
     const expected = clue.answer![index];
-    return filled?.toUpperCase() === expected?.toUpperCase();
+    return (
+      (filled ? toTurkishUpper(filled) : filled) ===
+      (expected ? toTurkishUpper(expected) : expected)
+    );
   });
 }
 
@@ -153,7 +157,7 @@ export function getWrongCells(level: CrosswordLevel, filledCells: FilledCells): 
       const key = cellKey(pos.row, pos.col);
       const filled = filledCells[key];
       const expected = clue.answer![index];
-      if (filled && filled.toUpperCase() !== expected?.toUpperCase()) {
+      if (filled && toTurkishUpper(filled) !== (expected ? toTurkishUpper(expected) : expected)) {
         wrong.add(key);
       }
     });

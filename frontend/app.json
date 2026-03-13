@@ -18,7 +18,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bulmaca.app",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -50,6 +53,13 @@
           "project": "bulmaca",
           "organization": "bulmaca-org"
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-6329550253975291~9574284134",
+          "iosAppId": "ca-app-pub-6329550253975291~5275946470"
+        }
       ]
     ],
     "newArchEnabled": true,
@@ -61,12 +71,12 @@
         "origin": false
       },
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "1828f3ad-8c17-4753-b35e-7174026dcb70"
       },
       "supabaseUrl": "http://localhost:54321",
-      "sentryDsn": "YOUR_SENTRY_DSN",
-      "revenueCatApiKeyIos": "YOUR_REVENUECAT_IOS_KEY",
-      "revenueCatApiKeyAndroid": "YOUR_REVENUECAT_ANDROID_KEY",
+      "sentryDsn": "",
+      "revenueCatApiKeyIos": "",
+      "revenueCatApiKeyAndroid": "",
       "admobInterstitialIos": "",
       "admobInterstitialAndroid": "",
       "admobRewardedIos": "",
@@ -74,10 +84,8 @@
     },
     "updates": {
       "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+      "url": "https://u.expo.dev/1828f3ad-8c17-4753-b35e-7174026dcb70"
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    }
+    "runtimeVersion": "1.0.0"
   }
 }

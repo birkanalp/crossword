@@ -1,0 +1,51 @@
+---
+description: Use .claude agents, skills, and context. When to delegate and when to read project resources.
+alwaysApply: true
+---
+
+# Use .claude Resources
+
+Use the agents, skills, and context from `.claude/` and `.cursor/`. Delegate via the Task tool with the correct `subagent_type`. Read skills and context when working in relevant domains.
+
+## Agents — Delegate via Task Tool
+
+| Subagent Type | When to Use |
+|----------------|-------------|
+| `master-orchestrator-agent` | Feature spans backend + frontend + contracts; coordinate multi-agent plan |
+| `backend-core-agent` | DB schema, RLS, Edge Functions, anti-cheat, leaderboard, entitlements, Supabase |
+| `frontend-core-agent` | Expo/React Native UI, Zustand, navigation, API integration, grid performance, offline |
+| `contract-guardian` | After API/schema changes; validate CONTRACTS/ sync |
+| `monetization-agent` | IAP, RevenueCat, AdMob, paywalls, entitlement UI |
+| `performance-agent` | React Native render optimization, memoization, component splitting |
+| `release-agent` | Build prep, EAS builds, changelogs, store metadata |
+| `code-review` | User asks for code review; before merge; git diff or specific files |
+| `design-review` | User asks for design audit; UI/UX review; use Playwright on admin |
+| `security-review` | Before merging backend/API changes; OWASP scan on git diff |
+
+## Skills — Read When Relevant
+
+| Skill | Path | When to Use |
+|-------|------|-------------|
+| agent-contract-protocol | `.cursor/skills/agent-contract-protocol/SKILL.md` | Contract changes, API boundaries |
+| expo-project-foundation | `.cursor/skills/expo-project-foundation/SKILL.md` | Project structure, config |
+| rn-svg-crossword-grid | `.cursor/skills/rn-svg-crossword-grid/SKILL.md` | Grid rendering, SVG performance |
+| supabase-backend-core | `.cursor/skills/supabase-backend-core/SKILL.md` | Backend schema, RLS, Edge Functions |
+| offline-progress-persistence | `.cursor/skills/offline-progress-persistence/SKILL.md` | Offline state, sync |
+| analytics-contract-enforcer | `.cursor/skills/analytics-contract-enforcer/SKILL.md` | Analytics events |
+| rn-revenuecat-iap | `.cursor/skills/rn-revenuecat-iap/SKILL.md` | IAP flows |
+| rn-admob-integration | `.cursor/skills/rn-admob-integration/SKILL.md` | Ad placement |
+| rn-performance-audit | `.cursor/skills/rn-performance-audit/SKILL.md` | Render optimization |
+| supabase-revenuecat-entitlements | `.cursor/skills/supabase-revenuecat-entitlements/SKILL.md` | Backend entitlement checks |
+
+## Context — Read When Relevant
+
+| Context | Path | When to Use |
+|---------|------|-------------|
+| Design principles | `.cursor/context/design-principles.md` or `.claude/context/design-principles.md` | Admin UI, design review, components |
+
+## Commands
+
+When the user asks for review or invokes a command:
+- **Code review** → `mcp_task` with `subagent_type: code-review` (default: `git diff HEAD`). See `.cursor/commands/review.md`
+- **Design review** → `mcp_task` with `subagent_type: design-review` (URL: http://localhost:3001). See `.cursor/commands/design-review.md`
+- **Security review** → `mcp_task` with `subagent_type: security-review` (default: `git diff HEAD`). See `.cursor/commands/security-review.md`

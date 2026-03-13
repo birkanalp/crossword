@@ -4,7 +4,8 @@
 // base_score        = difficulty_multiplier * 1000
 // time_penalty      = seconds_spent * 2
 // hint_penalty      = hints_used * 50
-// final_score       = max(0, base_score - time_penalty - hint_penalty)
+// mistake_penalty   = mistakes * 30
+// final_score       = max(0, base_score - time_penalty - hint_penalty - mistake_penalty)
 // =============================================================================
 
 import type { ScoreInput } from "./types.ts";
@@ -13,7 +14,8 @@ export function computeScore(input: ScoreInput): number {
   const base = Math.round(input.difficulty_multiplier * 1000);
   const timePenalty = input.time_spent * 2;
   const hintPenalty = input.hints_used * 50;
-  return Math.max(0, base - timePenalty - hintPenalty);
+  const mistakePenalty = input.mistakes * 30;
+  return Math.max(0, base - timePenalty - hintPenalty - mistakePenalty);
 }
 
 // ---------------------------------------------------------------------------

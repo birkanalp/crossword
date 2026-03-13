@@ -3,6 +3,7 @@
 #
 # Services:
 #   db        → PostgreSQL + Supabase extensions   (port 54322)
+#   cron      → Puzzle generation (scripts/tr/generate-crossword.ts, every 5 min)
 #   auth      → GoTrue (Supabase Auth)
 #   rest      → PostgREST (auto REST API)
 #   realtime  → Supabase Realtime
@@ -12,6 +13,7 @@
 #   studio    → Supabase Studio UI               (port 54323)
 #   kong      → API Gateway                      (port 54321)
 #   inbucket  → Local email server               (port 54324)
+#   ollama    → Local LLM for AI puzzle review   (port 11434)
 #
 # Usage:
 #   npm run docker:up          # start all services
@@ -272,6 +274,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      ollama:
+        condition: service_started
     environment:
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7W9fDQALeQAAAuklFMRCUjhJZJHnA3KNIhw}
@@ -279,12 +283,42 @@ services:
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}@db:5432/${POSTGRES_DB:-postgres}
       JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
       VERIFY_JWT: "false"
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      CRON_SECRET: ${CRON_SECRET:-cron-trigger-ai-secret}
     volumes:
       - ./backend/supabase/functions:/home/deno/functions:ro
     command:
       - start
       - --main-service
       - /home/deno/functions/main
+
+  # ── Ollama: local LLM for AI puzzle review ────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11435}:11434"  # 11435 avoids conflict with local Ollama on 11434
+    volumes:
+      - ollama-data:/root/.ollama
+      - ./docker/ollama/entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+
+  # ── Cron: puzzle generation (same script as admin "Yeni Bulmaca") ─────────────
+  cron:
+    build:
+      context: .
+      dockerfile: docker/cron/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}@db:5432/${POSTGRES_DB:-postgres}
+      CRON_TRIGGER_AI_URL: http://kong:8000/functions/v1/cronTriggerAiReview
+      CRON_SECRET: ${CRON_SECRET:-cron-trigger-ai-secret}
 
   # ── Inbucket (local email) ───────────────────────────────────────────────────
   inbucket:
@@ -298,3 +332,4 @@ services:
 volumes:
   db-data:
   storage-data:
+  ollama-data:

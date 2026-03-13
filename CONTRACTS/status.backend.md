@@ -1,6 +1,6 @@
 # Backend Status
-**contractVersion:** 1.1.6
-**lastUpdated:** 2026-02-25
+**contractVersion:** 1.3.0
+**lastUpdated:** 2026-03-02
 **owner:** backend-agent
 
 ---
@@ -25,6 +25,13 @@
 | 14 | checkWord progress/history persistence for resume | ✅ Done | `api.contract.json` v1.1.2, `db.schema.sql` v1.1.5 | checkWord now writes retry-safe answer history and upserts `user_progress` during validation |
 | 15 | Levels playability backfill (`pending` normalize + min-2 approved/difficulty) | ✅ Done | — | Migration `010_levels_playability_backfill.sql` normalizes auto-generated pending levels to approved and backfills to at least 2 approved TR levels per difficulty |
 | 16 | Phase 3 admin API contracts (puzzle review + metrics endpoints) | ✅ Done (Contracted) | `api.contract.json` v1.1.3, `db.schema.sql` v1.1.6 | Added admin-only endpoints with `app_metadata.role=admin` requirement; documented metrics query sources (no new tables) |
+| 17 | Ad events system (rewarded ads tracking + admin metrics) | ✅ Done | `api.contract.json` v1.2.4, migration `017_ad_events.sql` | New `ad_events` table with RLS; `adminMetricsOverview` extended with `ads_watched_today` |
+| 18 | Coin shop backend (coin_packages table + admin CRUD + public read) | ✅ Done | `api.contract.json` v1.2.5, migration `018_coin_packages.sql` | New `coin_packages` table; public `getCoinPackages` edge function; admin CRUD routes on `/admin/coin-packages`; `_shared/cors.ts` updated to allow PUT + DELETE |
+| 19 | Leaderboard profiles table + display_name snapshot on leaderboard_entries | ✅ Done | `db.schema.sql` v1.2.0, migration `019_leaderboard_profiles.sql` | New `profiles` table (username, avatar_color, RLS); `display_name` column added to `leaderboard_entries` for fast leaderboard queries without joins |
+| 20 | getLeaderboard Edge Function (daily/all_time/puzzle, score/time sort, pagination) | ✅ Done | `api.contract.json` v1.3.0, `backend/supabase/functions/getLeaderboard/index.ts` | Public endpoint with optional auth; supports 3 leaderboard types; my_entry populated when authenticated; CR-005 resolved |
+| 21 | Admin leaderboard endpoints (GET /admin/leaderboard, GET /admin/leaderboard/stats) | ✅ Done | `api.contract.json` v1.3.0, `backend/supabase/functions/admin/index.ts` | Admin JWT required; stats returns total_entries, unique_players, avg_score, avg_completion_time, top_scorer |
+| 22 | Scoring formula: mistake_penalty added (mistakes * 30) | ✅ Done | `_shared/scoring.ts` updated, `_shared/types.ts` ScoreInput.mistakes field added | formula: max(0, base - time*2 - hints*50 - mistakes*30) |
+| 23 | submitScore: display_name snapshot from profiles at submission time | ✅ Done | `backend/supabase/functions/submitScore/index.ts` updated | Fetches profiles.username before upsert; stores as display_name on leaderboard_entries |
 
 ---
 
@@ -113,7 +120,16 @@ backend/supabase/
 │   ├── 007_phase05_tr_only_pickup_enforcement.sql
 │   ├── 008_freq_score_generator_filter.sql
 │   ├── 009_checkword_progress_history.sql
-│   └── 010_levels_playability_backfill.sql
+│   ├── 010_levels_playability_backfill.sql
+│   ├── 011_*.sql  (prior migrations)
+│   ├── 012_ai_review_status.sql
+│   ├── 013_fix_storage_admin_password.sql
+│   ├── 014_pg_cron_puzzle_generation.sql
+│   ├── 015_remove_pg_cron_puzzle_job.sql
+│   ├── 016_app_settings_cron.sql
+│   ├── 017_ad_events.sql
+│   ├── 018_coin_packages.sql
+│   └── 019_leaderboard_profiles.sql
 ├── functions/
 │   ├── _shared/
 │   │   ├── types.ts
@@ -126,6 +142,8 @@ backend/supabase/
 │   ├── mergeGuestProgress/index.ts
 │   ├── getDailyChallenge/index.ts
 │   ├── checkWord/index.ts
+│   ├── getCoinPackages/index.ts
+│   ├── getLeaderboard/index.ts
 │   └── admin/index.ts
 ├── seed/sample_level.json
 ├── scripts/
@@ -133,9 +151,9 @@ backend/supabase/
 └── config.toml
 
 CONTRACTS/
-├── api.contract.json        ← v1.1.3
+├── api.contract.json        ← v1.3.0
 ├── level.schema.json        ← v1.0.3
 ├── events.contract.md       ← v1.0.0
-├── db.schema.sql            ← v1.1.6
+├── db.schema.sql            ← v1.2.0
 └── status.backend.md        ← this file
 ```

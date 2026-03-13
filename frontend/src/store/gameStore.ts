@@ -22,6 +22,7 @@ import {
 } from '@/domain/crossword/logic';
 import { calculateScore } from '@/domain/crossword/scoring';
 import type { ScoreBreakdown } from '@/domain/crossword/types';
+import { toTurkishUpper } from '@/utils/turkish';
 
 // ─── State Shape ──────────────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ interface GameState {
   // Runtime UI state
   wrongCells: Set<string>;
   correctClueIds: Set<string>;
+  /** Cell keys (row-col) that were revealed via hint — must not be cleared on wrong answer */
+  revealedCellKeys: Set<string>;
   isTimerRunning: boolean;
 }
 
@@ -84,8 +87,8 @@ interface GameActions {
    */
   advanceToNextClue: () => void;
 
-  /** Apply a "reveal letter" hint to a specific cell */
-  revealLetter: (row: number, col: number) => void;
+  /** Apply a "reveal letter" hint to a specific cell. Pass letter from API when client has no clue.answer. */
+  revealLetter: (row: number, col: number, letter?: string) => void;
 
   /** Apply a "reveal word" hint to the selected clue */
   revealWord: () => void;
@@ -121,6 +124,7 @@ const initialState: GameState = {
   scoreBreakdown: null,
   wrongCells: new Set(),
   correctClueIds: new Set(),
+  revealedCellKeys: new Set(),
   isTimerRunning: false,
 };
 
@@ -158,6 +162,7 @@ export const useGameStore = create<GameState & GameActions>()(
         scoreBreakdown: null, // Server resume doesn't include breakdown; completion modal uses local calc
         wrongCells: new Set(),
         correctClueIds,
+        revealedCellKeys: new Set(),
         selectedClue: firstUnanswered,
         selectedCell: firstUnanswered
           ? { row: firstUnanswered.startRow, col: firstUnanswered.startCol }
@@ -193,7 +198,7 @@ export const useGameStore = create<GameState & GameActions>()(
       if (!currentLevel || !selectedCell || !selectedClue) return;
 
       const key = cellKey(selectedCell.row, selectedCell.col);
-      const upperLetter = letter.toUpperCase();
+      const upperLetter = toTurkishUpper(letter);
 
       const newFilledCells = { ...filledCells, [key]: upperLetter };
 
@@ -204,7 +209,9 @@ export const useGameStore = create<GameState & GameActions>()(
         selectedClue.direction === 'across'
           ? selectedCell.col - selectedClue.startCol
           : selectedCell.row - selectedClue.startRow;
-      const correctLetter = selectedClue.answer?.[clueLetterIndex]?.toUpperCase();
+      const correctLetter = selectedClue.answer?.[clueLetterIndex]
+        ? toTurkishUpper(selectedClue.answer[clueLetterIndex]!)
+        : undefined;
       const isMistake = correctLetter !== undefined && upperLetter !== correctLetter;
 
       // Update wrong cells set
@@ -280,7 +287,8 @@ export const useGameStore = create<GameState & GameActions>()(
             correctClueIds.has(c.id) &&
             getCellsForClue(c).some((cp) => cp.row === pos.row && cp.col === pos.col),
         );
-        if (!lockedByOther) {
+        const isRevealedHint = get().revealedCellKeys.has(key);
+        if (!lockedByOther && !isRevealedHint) {
           newFilledCells[key] = '';
           newWrongCells.delete(key);
         }
@@ -301,10 +309,12 @@ export const useGameStore = create<GameState & GameActions>()(
         const letter = letters[index];
         if (!letter) return;
         const key = cellKey(pos.row, pos.col);
-        const upperLetter = letter.toUpperCase();
+        const upperLetter = toTurkishUpper(letter);
         newFilledCells[key] = upperLetter;
 
-        const correctLetter = clue.answer?.[index]?.toUpperCase();
+        const correctLetter = clue.answer?.[index]
+          ? toTurkishUpper(clue.answer[index]!)
+          : undefined;
         if (correctLetter !== undefined && upperLetter !== correctLetter) {
           newWrongCells.add(key);
           hasMistake = true;
@@ -369,18 +379,23 @@ export const useGameStore = create<GameState & GameActions>()(
       }
     },
 
-    revealLetter: (row, col) => {
+    revealLetter: (row, col, letterFromApi?) => {
       const { currentLevel, filledCells } = get();
       if (!currentLevel) return;
 
-      // Find the correct letter from any clue that covers this cell
-      let correctLetter: string | null = null;
-      for (const clue of currentLevel.clues) {
-        const cells = getCellsForClue(clue);
-        const idx = cells.findIndex((c) => c.row === row && c.col === col);
-        if (idx !== -1) {
-          correctLetter = clue.answer?.[idx]?.toUpperCase() ?? null;
-          break;
+      let correctLetter: string | null = letterFromApi
+        ? toTurkishUpper(letterFromApi)
+        : null;
+      if (!correctLetter) {
+        for (const clue of currentLevel.clues) {
+          const cells = getCellsForClue(clue);
+          const idx = cells.findIndex((c) => c.row === row && c.col === col);
+          if (idx !== -1) {
+            correctLetter = clue.answer?.[idx]
+              ? toTurkishUpper(clue.answer[idx]!)
+              : null;
+            break;
+          }
         }
       }
 
@@ -390,6 +405,8 @@ export const useGameStore = create<GameState & GameActions>()(
       const newFilledCells = { ...filledCells, [key]: correctLetter };
       const newWrongCells = new Set(get().wrongCells);
       newWrongCells.delete(key);
+      const newRevealedCellKeys = new Set(get().revealedCellKeys);
+      newRevealedCellKeys.add(key);
 
       const isCompleted = isPuzzleComplete(currentLevel, newFilledCells);
       const scoreBreakdown = isCompleted
@@ -399,6 +416,7 @@ export const useGameStore = create<GameState & GameActions>()(
       set((state) => ({
         filledCells: newFilledCells,
         wrongCells: newWrongCells,
+        revealedCellKeys: newRevealedCellKeys,
         hintsUsed: state.hintsUsed + 1,
         isCompleted,
         scoreBreakdown,
@@ -416,7 +434,9 @@ export const useGameStore = create<GameState & GameActions>()(
 
       cells.forEach((pos, index) => {
         const key = cellKey(pos.row, pos.col);
-        const letter = selectedClue.answer?.[index]?.toUpperCase() ?? '';
+        const letter = selectedClue.answer?.[index]
+          ? toTurkishUpper(selectedClue.answer[index]!)
+          : '';
         newFilledCells[key] = letter;
         newWrongCells.delete(key);
       });

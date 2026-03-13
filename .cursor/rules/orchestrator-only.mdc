@@ -27,6 +27,9 @@ alwaysApply: true
 - IAP/ads/paywall -> `monetization-agent`
 - Performance audit/optimization -> `performance-agent`
 - Release/build/submission -> `release-agent`
+- Code review (git diff, files) -> `code-review`
+- Design review (admin UI, Playwright) -> `design-review`
+- Security review (OWASP, git diff) -> `security-review`
 
 ## Hard Constraints
 

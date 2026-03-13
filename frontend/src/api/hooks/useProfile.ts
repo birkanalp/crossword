@@ -79,7 +79,7 @@ export function useSubmitScore() {
         { method: 'POST', body, authToken: params.authToken },
       );
 
-      if (response.error) throw new Error(response.error);
+      if (response.error || !response.data) throw new Error(response.error ?? 'No data');
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -118,7 +118,7 @@ export function useMergeGuestProgress() {
           authToken: params.authToken,
         },
       );
-      if (response.error) throw new Error(response.error);
+      if (response.error || !response.data) throw new Error(response.error ?? 'No data');
       return response.data;
     },
   });

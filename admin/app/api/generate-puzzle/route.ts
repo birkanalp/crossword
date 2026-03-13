@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
   }
 
-  let body: { difficulty?: string };
+  let body: { difficulty?: string; count?: number };
   try {
     body = await req.json();
   } catch {
@@ -51,60 +51,135 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // count: 1–100, varsayılan 1
+  const rawCount = body?.count;
+  const count =
+    rawCount === undefined || rawCount === null
+      ? 1
+      : Math.floor(Number(rawCount));
+  if (!Number.isInteger(count) || count < 1 || count > 100) {
+    return NextResponse.json(
+      { error: 'count must be an integer between 1 and 100' },
+      { status: 400 }
+    );
+  }
+
   const projectRoot = path.resolve(process.cwd(), '..');
   const scriptPath = path.join(projectRoot, 'scripts', 'tr', 'generate-crossword.ts');
 
-  return new Promise<NextResponse>((resolve) => {
+  // Batch mode (count > 1): fire-and-forget, return 202 immediately
+  if (count > 1) {
     const child = spawn(
       'npx',
-      ['tsx', scriptPath, '--difficulty', difficulty, '--count', '1', '--json'],
+      ['tsx', scriptPath, '--difficulty', difficulty, '--count', String(count), '--json'],
       {
         cwd: projectRoot,
         env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
+        stdio: 'ignore',
       }
     );
+    child.unref();
+    return NextResponse.json(
+      { accepted: true, count, difficulty },
+      { status: 202 }
+    );
+  }
 
-    let stdout = '';
-    let stderr = '';
+  type GenResult = {
+    success: boolean;
+    level_id?: string | null;
+    level_ids?: string[];
+    difficulty?: string;
+    error?: string;
+  };
 
-    child.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr?.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('close', (code) => {
-      const lines = stdout.trim().split('\n');
-      const lastLine = lines[lines.length - 1];
-      if (lastLine) {
-        try {
-          const parsed = JSON.parse(lastLine) as { success?: boolean; level_id?: string | null; error?: string };
-          if (parsed.success && parsed.level_id) {
-            resolve(NextResponse.json({ level_id: parsed.level_id, difficulty }));
-            return;
-          }
-          if (!parsed.success && parsed.error) {
-            resolve(NextResponse.json({ error: parsed.error }, { status: 500 }));
-            return;
-          }
-        } catch {
-          // fall through to generic error
+  const runGenerator = (): Promise<GenResult> =>
+    new Promise((resolve, reject) => {
+      const child = spawn(
+        'npx',
+        ['tsx', scriptPath, '--difficulty', difficulty, '--count', '1', '--json'],
+        {
+          cwd: projectRoot,
+          env: { ...process.env },
+          stdio: ['ignore', 'pipe', 'pipe'],
         }
-      }
+      );
 
-      if (code !== 0) {
-        const errMsg = stderr.trim() || stdout.trim() || `Script exited with code ${code}`;
-        resolve(NextResponse.json({ error: errMsg }, { status: 500 }));
-        return;
-      }
+      let stdout = '';
+      let stderr = '';
 
-      resolve(NextResponse.json({ error: 'Generation completed but no level_id returned' }, { status: 500 }));
+      child.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
+      child.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
+
+      child.on('close', (code) => {
+        const lines = stdout.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        if (lastLine) {
+          try {
+            const parsed = JSON.parse(lastLine) as GenResult;
+            resolve({
+              success: !!parsed.success,
+              level_id: parsed.level_id ?? null,
+              level_ids: Array.isArray(parsed.level_ids) ? parsed.level_ids : undefined,
+              difficulty: parsed.difficulty,
+              error: parsed.error,
+            });
+            return;
+          } catch {
+            // fall through
+          }
+        }
+        if (code !== 0) {
+          resolve({ success: false, error: stderr.trim() || stdout.trim() || `Script exited with code ${code}` });
+        } else {
+          resolve({ success: false, error: 'Generation completed but no level_id(s) returned' });
+        }
+      });
+
+      child.on('error', (err) => reject(err));
     });
 
-    child.on('error', (err) => {
-      resolve(NextResponse.json({ error: String(err.message) }, { status: 500 }));
-    });
-  });
+  const MAX_RETRIES = 3;
+  const RETRYABLE_ERROR = 'Failed to generate playable crossword';
+
+  const runAiReview = async (levelId: string) => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const adminJwt = req.headers.get('authorization')?.slice(7) ?? '';
+    try {
+      await fetch(`${supabaseUrl}/functions/v1/admin/puzzles/${levelId}/ai-review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminJwt}`,
+          'apikey': anonKey,
+        },
+      });
+    } catch {
+      // AI review başarısız — bulmaca olduğu gibi kalır
+    }
+  };
+
+  // Tekil üretim: mevcut retry mantığı korunuyor
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await runGenerator();
+      if (result.success && result.level_id) {
+        await runAiReview(result.level_id);
+        return NextResponse.json({ level_id: result.level_id, difficulty });
+      }
+      const isRetryable = result.error?.includes(RETRYABLE_ERROR);
+      if (!isRetryable || attempt === MAX_RETRIES) {
+        return NextResponse.json({ error: result.error ?? 'Generation failed' }, { status: 500 });
+      }
+      // "Failed to generate playable crossword" durumunda tekrar dene (algoritma olasılıksal)
+    } catch (err) {
+      if (attempt === MAX_RETRIES) {
+        return NextResponse.json({ error: String((err as Error).message) }, { status: 500 });
+      }
+    }
+  }
+
+  return NextResponse.json({ error: 'Generation failed after retries' }, { status: 500 });
 }

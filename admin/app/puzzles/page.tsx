@@ -370,7 +370,7 @@ export default function PuzzlesPage() {
                 <span className="text-text-secondary text-xs">
                   {p.ai_reviewed_at === null ? (
                     p.review_status === 'ai_review' ? (
-                      'İnceleniyor'
+                      <span className="text-text-tertiary italic">İnceleniyor…</span>
                     ) : (
                       <button
                         type="button"
@@ -381,8 +381,20 @@ export default function PuzzlesPage() {
                         {triggeringId === p.id ? <Spinner className="w-4 h-4 inline" /> : 'Başlat'}
                       </button>
                     )
+                  ) : p.ai_review_score !== null ? (
+                    <span
+                      className={`font-semibold tabular-nums ${
+                        p.ai_review_score >= 80
+                          ? 'text-success'
+                          : p.ai_review_score >= 60
+                          ? 'text-warning'
+                          : 'text-error'
+                      }`}
+                    >
+                      %{p.ai_review_score}
+                    </span>
                   ) : (
-                    'Tamamlandı'
+                    <span className="text-text-tertiary">—</span>
                   )}
                 </span>
                 <span className="text-text-tertiary text-xs">

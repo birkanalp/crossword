@@ -190,7 +190,7 @@ async function handleListPuzzles(url: URL): Promise<Response> {
   const db = serviceClient();
   let query = db
     .from("levels")
-    .select("id, difficulty, language, review_status, created_at, ai_reviewed_at", { count: "exact" })
+    .select("id, difficulty, language, review_status, created_at, ai_reviewed_at, ai_review_score", { count: "exact" })
     .is("deleted_at", null);
 
   if (status && ["pending", "approved", "rejected", "ai_review"].includes(status)) {
@@ -213,6 +213,7 @@ async function handleListPuzzles(url: URL): Promise<Response> {
     review_status: r.review_status,
     created_at: r.created_at,
     ai_reviewed_at: r.ai_reviewed_at ?? null,
+    ai_review_score: r.ai_review_score ?? null,
   }));
 
   return jsonResponse({ items, total: count ?? 0 });
@@ -912,7 +913,8 @@ async function handleAiReview(id: string): Promise<Response> {
   }
 
   const decision = makeReviewDecision(detResult, llmResult);
-  const newStatus = decision.passed ? "pending" : "rejected";
+  // %80 ve üzeri puan → otomatik onay; altı → insan incelemesi bekler
+  const newStatus = !decision.passed ? "rejected" : decision.score >= 80 ? "approved" : "pending";
   const aiNotes =
     decision.feedback +
     (decision.issues.length > 0
@@ -941,6 +943,7 @@ async function handleAiReview(id: string): Promise<Response> {
     issues: decision.issues,
     feedback: decision.feedback,
     review_status: newStatus,
+    auto_approved: newStatus === "approved",
     rejected_by: decision.rejectedBy ?? null,
   });
 }

@@ -16,6 +16,7 @@ export interface AdminPuzzleSummary {
   review_status: 'ai_review' | 'pending' | 'approved' | 'rejected';
   created_at: string;
   ai_reviewed_at: string | null;
+  ai_review_score: number | null;
 }
 
 export interface AdminClue {

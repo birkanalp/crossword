@@ -55,8 +55,9 @@ export default function HomeScreen() {
   };
 
   return (
+    <View style={styles.root}>
     <ScrollView
-      style={styles.root}
+      style={styles.scrollView}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -125,9 +126,10 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ─── Banner Ad ────────────────────────────────────────────────────── */}
-      <AdBanner hideAds={noAdsActive} />
     </ScrollView>
+    {/* ─── Banner Ad — sabit, ekranın en altında ────────────────────────── */}
+    <AdBanner hideAds={noAdsActive} />
+    </View>
   );
 }
 
@@ -144,9 +146,13 @@ function makeStyles(isDark: boolean) {
       flex: 1,
       backgroundColor: bg,
     },
+    scrollView: {
+      flex: 1,
+    },
     content: {
       padding: 20,
       paddingTop: 60,
+      paddingBottom: 16,
       gap: 16,
     },
     header: {

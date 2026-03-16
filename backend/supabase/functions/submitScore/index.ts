@@ -6,13 +6,14 @@
 //
 // Flow:
 //   1. Authenticate caller (must be a registered user; guests cannot submit)
-//   2. Fetch level metadata (answer_hash, difficulty, version)
+//   2. Fetch level metadata (answer_hash, difficulty, version, sort_order)
 //   3. Run anti-cheat validation (hash + time + hint sanity)
 //   4. Compute score server-side (client score is NEVER used)
 //   5. Upsert leaderboard_entries (keep best score)
 //   6. Mark user_progress as completed
-//   7. Update streak + award coins
-//   8. Return { score, rank, is_new_best }
+//   7. Trigger unlock for next level / next difficulty
+//   8. Update streak + award coins
+//   9. Return { score, rank, is_new_best }
 // =============================================================================
 
 import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
@@ -83,7 +84,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // ── Fetch level ────────────────────────────────────────────────────────────
   const { data: level, error: levelError } = await db
     .from("levels")
-    .select("id, version, difficulty, is_premium, answer_hash, difficulty_multiplier, deleted_at")
+    .select("id, version, difficulty, is_premium, answer_hash, difficulty_multiplier, deleted_at, sort_order")
     .eq("id", level_id)
     .single();
 
@@ -181,6 +182,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       { onConflict: "user_id,level_id" },
     );
 
+  // ── Trigger level unlocks ─────────────────────────────────────────────────
+  await triggerUnlocks(db, userId, level.difficulty, level.sort_order ?? 0);
+
   // ── Update streak ─────────────────────────────────────────────────────────
   await updateStreak(db, userId);
 
@@ -205,6 +209,107 @@ Deno.serve(async (req: Request): Promise<Response> => {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const DIFFICULTY_ORDER_UNLOCK = ["easy", "medium", "hard", "expert"] as const;
+
+async function triggerUnlocks(
+  db: ReturnType<typeof serviceClient>,
+  userId: string,
+  difficulty: string,
+  sortOrder: number,
+): Promise<void> {
+  try {
+    // 1. Unlock the next level within the same difficulty
+    const { data: nextLevel } = await db
+      .from("levels")
+      .select("id")
+      .eq("target_difficulty", difficulty)
+      .eq("sort_order", sortOrder + 1)
+      .eq("review_status", "approved")
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (nextLevel) {
+      await db
+        .from("user_level_unlocks")
+        .upsert(
+          { user_id: userId, level_id: nextLevel.id },
+          { onConflict: "user_id,level_id", ignoreDuplicates: true },
+        );
+    }
+
+    // 2. Cross-difficulty rule: fetch all level IDs for this difficulty
+    const { data: diffLevels } = await db
+      .from("levels")
+      .select("id")
+      .eq("target_difficulty", difficulty)
+      .eq("review_status", "approved")
+      .is("deleted_at", null);
+
+    const diffLevelIds = (diffLevels ?? []).map((l: { id: string }) => l.id);
+
+    if (diffLevelIds.length === 0) return;
+
+    // Count how many the user has completed in this difficulty
+    const { count: completedCount } = await db
+      .from("user_progress")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("completed_at", "is", null)
+      .in("level_id", diffLevelIds);
+
+    if ((completedCount ?? 0) >= 3) {
+      const diffIndex = DIFFICULTY_ORDER_UNLOCK.indexOf(
+        difficulty as typeof DIFFICULTY_ORDER_UNLOCK[number],
+      );
+      const nextDiff = DIFFICULTY_ORDER_UNLOCK[diffIndex + 1];
+
+      if (!nextDiff) return; // nothing after expert
+
+      // Fetch all level IDs in the next difficulty
+      const { data: nextDiffLevels } = await db
+        .from("levels")
+        .select("id")
+        .eq("target_difficulty", nextDiff)
+        .eq("review_status", "approved")
+        .is("deleted_at", null);
+
+      const nextDiffIds = (nextDiffLevels ?? []).map((l: { id: string }) => l.id);
+
+      if (nextDiffIds.length === 0) return;
+
+      // Only seed if the user has no unlock in the next difficulty yet
+      const { count: unlockedCount } = await db
+        .from("user_level_unlocks")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .in("level_id", nextDiffIds);
+
+      if ((unlockedCount ?? 0) === 0) {
+        const { data: firstLevel } = await db
+          .from("levels")
+          .select("id")
+          .eq("target_difficulty", nextDiff)
+          .eq("sort_order", 1)
+          .eq("review_status", "approved")
+          .is("deleted_at", null)
+          .maybeSingle();
+
+        if (firstLevel) {
+          await db
+            .from("user_level_unlocks")
+            .upsert(
+              { user_id: userId, level_id: firstLevel.id },
+              { onConflict: "user_id,level_id", ignoreDuplicates: true },
+            );
+        }
+      }
+    }
+  } catch (err) {
+    // Unlock errors must not disrupt the main game flow
+    console.error("[submitScore] triggerUnlocks error:", err);
+  }
+}
 
 async function updateStreak(db: ReturnType<typeof serviceClient>, userId: string): Promise<void> {
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD

@@ -21,6 +21,7 @@
 //   POST   /admin/todos                          -> create admin todo
 //   PATCH  /admin/todos/:id                      -> update admin todo
 //   DELETE /admin/todos/:id                      -> delete admin todo
+//   PATCH  /admin/puzzles/:id/sort-order         -> update puzzle sort_order
 //   GET    /admin/leaderboard                    -> paginated leaderboard (same params as public getLeaderboard)
 //   GET    /admin/leaderboard/stats              -> aggregate leaderboard stats
 // =============================================================================
@@ -78,6 +79,7 @@ function parseRoute(pathname: string): { route: string; id?: string; clueKey?: s
       if (parts[2] === "decision") return { route: "decision", id: parts[1] };
       if (parts[2] === "ai-review") return { route: "aiReview", id: parts[1] };
       if (parts[2] === "generate-hints") return { route: "generateHints", id: parts[1] };
+      if (parts[2] === "sort-order") return { route: "updatePuzzleSortOrder", id: parts[1] };
       return { route: "getPuzzle", id: parts[1] };
     }
     return { route: "listPuzzles" };
@@ -144,6 +146,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (route === "generateHints" && req.method === "POST" && id) {
       return await handleGenerateHints(id);
     }
+    if (route === "updatePuzzleSortOrder" && req.method === "PATCH" && id) {
+      return await handleUpdatePuzzleSortOrder(id, req);
+    }
     if (route === "metricsOverview" && req.method === "GET") {
       return await handleMetricsOverview();
     }
@@ -190,7 +195,7 @@ async function handleListPuzzles(url: URL): Promise<Response> {
   const db = serviceClient();
   let query = db
     .from("levels")
-    .select("id, difficulty, language, review_status, created_at, ai_reviewed_at, ai_review_score", { count: "exact" })
+    .select("id, difficulty, language, review_status, created_at, ai_reviewed_at, ai_review_score, sort_order", { count: "exact" })
     .is("deleted_at", null);
 
   if (status && ["pending", "approved", "rejected", "ai_review"].includes(status)) {
@@ -214,9 +219,55 @@ async function handleListPuzzles(url: URL): Promise<Response> {
     created_at: r.created_at,
     ai_reviewed_at: r.ai_reviewed_at ?? null,
     ai_review_score: r.ai_review_score ?? null,
+    sort_order: r.sort_order ?? 0,
   }));
 
   return jsonResponse({ items, total: count ?? 0 });
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /admin/puzzles/:id/sort-order
+// ---------------------------------------------------------------------------
+async function handleUpdatePuzzleSortOrder(id: string, req: Request): Promise<Response> {
+  let body: { sort_order?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON", 400);
+  }
+
+  const sortOrder = Number(body.sort_order);
+  if (!Number.isInteger(sortOrder) || sortOrder < 1) {
+    return errorResponse("sort_order must be an integer >= 1", 400);
+  }
+
+  const db = serviceClient();
+
+  const { data: puzzleRow, error: fetchError } = await db
+    .from("levels")
+    .select("id, difficulty")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (fetchError || !puzzleRow) {
+    return errorResponse("Puzzle not found", 404);
+  }
+
+  const { error: updateError } = await db
+    .from("levels")
+    .update({ sort_order: sortOrder, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (updateError) {
+    console.error("[admin] updatePuzzleSortOrder error:", updateError);
+    if (updateError.code === "23505") {
+      return errorResponse(`sort_order ${sortOrder} already used in this difficulty`, 409);
+    }
+    return errorResponse("Failed to update sort_order", 500);
+  }
+
+  return jsonResponse({ success: true, sort_order: sortOrder });
 }
 
 // ---------------------------------------------------------------------------

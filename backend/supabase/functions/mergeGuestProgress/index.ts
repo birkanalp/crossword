@@ -142,6 +142,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .in("id", rowsToDelete);
   }
 
+  // ── Migrate guest level unlocks → user ───────────────────────────────────
+  try {
+    const { data: guestUnlocks } = await db
+      .from("user_level_unlocks")
+      .select("level_id, unlocked_at")
+      .eq("guest_id", guestId);
+
+    const guestUnlockRows = (guestUnlocks ?? []) as { level_id: string; unlocked_at: string }[];
+
+    if (guestUnlockRows.length > 0) {
+      // Upsert into user unlocks
+      await db
+        .from("user_level_unlocks")
+        .upsert(
+          guestUnlockRows.map((r) => ({
+            user_id: userId,
+            level_id: r.level_id,
+            unlocked_at: r.unlocked_at,
+          })),
+          { onConflict: "user_id,level_id", ignoreDuplicates: true },
+        );
+
+      // Clean up guest unlock rows
+      await db
+        .from("user_level_unlocks")
+        .delete()
+        .eq("guest_id", guestId);
+    }
+  } catch (err) {
+    console.error("[mergeGuestProgress] unlock migration error:", err);
+    // Unlock migration failure does not fail the overall merge
+  }
+
   const response: MergeGuestResponse = { merged_count: mergedCount, skipped_count: skippedCount };
   return jsonResponse(response);
 });

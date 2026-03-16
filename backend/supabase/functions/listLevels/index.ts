@@ -6,7 +6,7 @@
 // Returns paginated list of approved level metadata with caller's progress.
 // Used by the levels browser screen.
 // Query params: difficulty, difficulties (comma-separated), hide_completed,
-// sort (last_completed_first), limit (default 8), offset.
+// limit (default 8), offset.
 // =============================================================================
 
 import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
@@ -19,6 +19,7 @@ interface LevelRow {
   target_difficulty: string;
   is_premium: boolean;
   created_at: string;
+  sort_order: number;
 }
 
 interface ProgressRow {
@@ -33,6 +34,8 @@ interface LevelWithProgress {
   difficulty: string;
   is_premium: boolean;
   created_at: string;
+  sort_order: number;
+  is_unlocked: boolean;
   progress: { completed_at: string | null; time_spent: number; updated_at?: string } | null;
 }
 
@@ -47,7 +50,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const difficulty = url.searchParams.get("difficulty") ?? undefined;
   const difficultiesParam = url.searchParams.get("difficulties") ?? undefined;
   const hideCompleted = url.searchParams.get("hide_completed") === "true";
-  const sort = url.searchParams.get("sort") ?? undefined;
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "8", 10)));
   const offset = Math.max(0, parseInt(url.searchParams.get("offset") ?? "0", 10));
 
@@ -65,14 +67,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (difficulties.length === 0) difficulties = undefined;
   }
 
-  // ── Fetch approved levels (no pagination yet — we need to sort in memory) ───
+  // ── Fetch approved levels ordered by sort_order ASC ─────────────────────
   const fetchLimit = Math.min(500, offset + limit + 100);
   let query = db
     .from("levels")
-    .select("id, target_difficulty, is_premium, created_at", { count: "exact" })
+    .select("id, target_difficulty, is_premium, created_at, sort_order", { count: "exact" })
     .eq("review_status", "approved")
     .is("deleted_at", null)
-    .order("created_at", { ascending: false })
+    .order("sort_order", { ascending: true })
     .limit(fetchLimit);
 
   if (difficulty) {
@@ -96,6 +98,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     difficulty: r.target_difficulty ?? "medium",
     is_premium: r.is_premium ?? false,
     created_at: r.created_at,
+    sort_order: r.sort_order ?? 0,
+    is_unlocked: false,
     progress: null,
   }));
 
@@ -138,11 +142,84 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
-  // ── Attach progress and optionally filter ─────────────────────────────────
+  // ── Unlock state ─────────────────────────────────────────────────────────
+  const unlockedIds = new Set<string>();
+
+  if (identity.userId) {
+    // Authenticated: fetch from user_level_unlocks
+    const { data: unlockRows } = await db
+      .from("user_level_unlocks")
+      .select("level_id")
+      .eq("user_id", identity.userId)
+      .in("level_id", levelIds);
+
+    for (const u of (unlockRows ?? []) as { level_id: string }[]) {
+      unlockedIds.add(u.level_id);
+    }
+
+    // If no unlocks exist → seed the first easy level
+    if (unlockedIds.size === 0) {
+      const { data: firstEasy } = await db
+        .from("levels")
+        .select("id")
+        .eq("target_difficulty", "easy")
+        .eq("sort_order", 1)
+        .eq("review_status", "approved")
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (firstEasy) {
+        await db
+          .from("user_level_unlocks")
+          .upsert(
+            { user_id: identity.userId, level_id: firstEasy.id },
+            { onConflict: "user_id,level_id", ignoreDuplicates: true },
+          );
+        unlockedIds.add(firstEasy.id);
+      }
+    }
+  } else if (identity.guestId) {
+    // Guest: fetch from user_level_unlocks
+    const { data: unlockRows } = await db
+      .from("user_level_unlocks")
+      .select("level_id")
+      .eq("guest_id", identity.guestId)
+      .in("level_id", levelIds);
+
+    for (const u of (unlockRows ?? []) as { level_id: string }[]) {
+      unlockedIds.add(u.level_id);
+    }
+
+    // If no unlocks exist → seed the first easy level
+    if (unlockedIds.size === 0) {
+      const { data: firstEasy } = await db
+        .from("levels")
+        .select("id")
+        .eq("target_difficulty", "easy")
+        .eq("sort_order", 1)
+        .eq("review_status", "approved")
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (firstEasy) {
+        await db
+          .from("user_level_unlocks")
+          .upsert(
+            { guest_id: identity.guestId, level_id: firstEasy.id },
+            { onConflict: "guest_id,level_id", ignoreDuplicates: true },
+          );
+        unlockedIds.add(firstEasy.id);
+      }
+    }
+  }
+  // else: no identity → no unlocks (edge case)
+
+  // ── Attach progress and unlock state ─────────────────────────────────────
   let levelsWithProgress: LevelWithProgress[] = levelsWithDifficulty.map((l) => {
     const progress = progressMap[l.id];
     return {
       ...l,
+      is_unlocked: unlockedIds.has(l.id),
       progress: progress
         ? { completed_at: progress.completed_at, time_spent: progress.time_spent }
         : null,
@@ -155,33 +232,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
     levelsWithProgress = levelsWithProgress.filter(
       (l) => !l.progress || l.progress.completed_at == null,
     );
-  }
-
-  // ── Sort: last_completed_first ───────────────────────────────────────────
-  if (sort === "last_completed_first" && (identity.userId || identity.guestId)) {
-    const withProgress = levelsWithProgress.map((l) => {
-      const p = progressMap[l.id];
-      return { ...l, _updated_at: p?.updated_at, _completed_at: p?.completed_at };
-    });
-    withProgress.sort((a, b) => {
-      const aCompleted = a.progress?.completed_at != null;
-      const bCompleted = b.progress?.completed_at != null;
-      const aInProgress = a.progress && !aCompleted;
-      const bInProgress = b.progress && !bCompleted;
-
-      if (aCompleted && bCompleted) {
-        return (b._completed_at ?? "").localeCompare(a._completed_at ?? "");
-      }
-      if (aCompleted) return -1;
-      if (bCompleted) return 1;
-      if (aInProgress && bInProgress) {
-        return (b._updated_at ?? "").localeCompare(a._updated_at ?? "");
-      }
-      if (aInProgress) return -1;
-      if (bInProgress) return 1;
-      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
-    });
-    levelsWithProgress = withProgress.map(({ _updated_at, _completed_at, ...rest }) => rest);
   }
 
   const totalFiltered = levelsWithProgress.length;

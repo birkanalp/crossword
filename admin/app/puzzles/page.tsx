@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminListPuzzles, adminGeneratePuzzle, adminGetCronEnabled, adminSetCronEnabled, adminTriggerAiReview, adminStartAllAiReview, adminGetAiReviewCronEnabled, adminSetAiReviewCronEnabled, type AdminPuzzleSummary, type GeneratePuzzleDifficulty } from '@/lib/api';
+import { adminListPuzzles, adminGeneratePuzzle, adminGetCronEnabled, adminSetCronEnabled, adminTriggerAiReview, adminStartAllAiReview, adminGetAiReviewCronEnabled, adminSetAiReviewCronEnabled, adminUpdatePuzzleSortOrder, type AdminPuzzleSummary, type GeneratePuzzleDifficulty } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
@@ -45,6 +45,8 @@ export default function PuzzlesPage() {
   const [aiReviewCronToggling, setAiReviewCronToggling] = useState(false);
   const [startingAll, setStartingAll] = useState(false);
   const [startAllResult, setStartAllResult] = useState<string | null>(null);
+  const [editingSortOrder, setEditingSortOrder] = useState<{ id: string; value: number } | null>(null);
+  const [sortOrderLoading, setSortOrderLoading] = useState(false);
 
   const loadCronStatus = useCallback(() => {
     if (!token) return;
@@ -145,6 +147,20 @@ export default function PuzzlesPage() {
     const { error } = await adminTriggerAiReview(token, id);
     setTriggeringId(null);
     if (!error) loadPuzzles();
+  };
+
+  const handleSortOrderSave = async (id: string, newOrder: number) => {
+    if (!token) return;
+    setSortOrderLoading(true);
+    try {
+      await adminUpdatePuzzleSortOrder(token, id, newOrder);
+      setEditingSortOrder(null);
+      void loadPuzzles();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSortOrderLoading(false);
+    }
   };
 
   const totalPages = Math.ceil(total / 20);
@@ -349,7 +365,8 @@ export default function PuzzlesPage() {
         <Card>
           <div className="divide-y divide-border">
             {/* Table header */}
-            <div className="grid grid-cols-6 px-4 py-3 bg-bg-elevated text-xs font-semibold text-text-secondary uppercase tracking-wide rounded-t-xl">
+            <div className="grid grid-cols-7 px-4 py-3 bg-bg-elevated text-xs font-semibold text-text-secondary uppercase tracking-wide rounded-t-xl">
+              <span>Sort</span>
               <span>ID</span>
               <span>Zorluk</span>
               <span>Dil</span>
@@ -358,15 +375,46 @@ export default function PuzzlesPage() {
               <span>Tarih</span>
             </div>
             {items.map((p) => (
-              <Link
+              <div
                 key={p.id}
-                href={`/puzzles/${p.id}`}
-                className="grid grid-cols-6 px-4 py-3.5 hover:bg-bg-elevated transition-colors items-center text-sm"
+                className="grid grid-cols-7 px-4 py-3.5 hover:bg-bg-elevated transition-colors items-center text-sm"
               >
-                <span className="font-mono text-accent text-xs">{p.id.slice(0, 8)}&hellip;</span>
-                <span className="text-text-secondary">{DIFFICULTY_LABELS[p.difficulty as GeneratePuzzleDifficulty] ?? p.difficulty}</span>
-                <span className="text-text-secondary uppercase text-xs">{p.language}</span>
-                <span><Badge status={p.review_status as 'ai_review' | 'pending' | 'approved' | 'rejected'} /></span>
+                <span className="text-text-secondary text-xs">
+                  {editingSortOrder?.id === p.id ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-16 bg-bg-elevated border border-border rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-accent"
+                        value={editingSortOrder.value}
+                        onChange={e => setEditingSortOrder({ id: p.id, value: Number(e.target.value) })}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') void handleSortOrderSave(p.id, editingSortOrder.value);
+                          if (e.key === 'Escape') setEditingSortOrder(null);
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => void handleSortOrderSave(p.id, editingSortOrder.value)}
+                        disabled={sortOrderLoading}
+                        className="text-xs text-accent hover:underline"
+                      >
+                        {sortOrderLoading ? '...' : 'Kaydet'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="hover:text-text-primary cursor-pointer"
+                      onClick={() => setEditingSortOrder({ id: p.id, value: p.sort_order })}
+                    >
+                      {p.sort_order}
+                    </button>
+                  )}
+                </span>
+                <Link href={`/puzzles/${p.id}`} className="font-mono text-accent text-xs">{p.id.slice(0, 8)}&hellip;</Link>
+                <Link href={`/puzzles/${p.id}`} className="text-text-secondary">{DIFFICULTY_LABELS[p.difficulty as GeneratePuzzleDifficulty] ?? p.difficulty}</Link>
+                <Link href={`/puzzles/${p.id}`} className="text-text-secondary uppercase text-xs">{p.language}</Link>
+                <Link href={`/puzzles/${p.id}`}><Badge status={p.review_status as 'ai_review' | 'pending' | 'approved' | 'rejected'} /></Link>
                 <span className="text-text-secondary text-xs">
                   {p.ai_reviewed_at === null ? (
                     p.review_status === 'ai_review' ? (
@@ -397,10 +445,10 @@ export default function PuzzlesPage() {
                     <span className="text-text-tertiary">—</span>
                   )}
                 </span>
-                <span className="text-text-tertiary text-xs">
+                <Link href={`/puzzles/${p.id}`} className="text-text-tertiary text-xs">
                   {new Date(p.created_at).toLocaleDateString('tr-TR')}
-                </span>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         </Card>

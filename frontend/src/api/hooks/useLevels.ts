@@ -126,6 +126,10 @@ export interface LevelSummary {
   id: string;
   difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   is_premium: boolean;
+  /** 1-based position within the difficulty group (backend: sort_order ASC) */
+  sort_order: number;
+  /** Progression gate — false means the previous level has not been completed */
+  is_unlocked: boolean;
   progress: {
     completed_at: string | null;
     time_spent: number;

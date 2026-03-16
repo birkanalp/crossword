@@ -91,6 +91,7 @@ export default function LevelsScreen() {
   }, []);
 
   const handlePlayLevel = (level: LevelSummary) => {
+    if (!level.is_unlocked) return; // progression lock — dokunulamaz
     if (level.is_premium) {
       setPaywallVisible(true);
       return;
@@ -108,7 +109,6 @@ export default function LevelsScreen() {
   const sharedListOpts = {
     ...(guestId !== undefined ? { guestId } : {}),
     hide_completed: hideCompleted,
-    sort: 'last_completed_first' as const,
     offset: 0,
   };
   const easyData = useListLevels({
@@ -327,30 +327,45 @@ function LevelBox({
   onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
 }) {
+  const isProgressionLocked = !level.is_unlocked;
+  const isPremiumLocked = level.is_premium && level.is_unlocked; // unlocked but paid
   const status = getLevelStatus(level);
   const diffColor = DIFFICULTY_COLORS[level.difficulty] ?? Colors.primary;
-  const isPremiumLocked = level.is_premium;
 
   return (
     <TouchableOpacity
       style={[
         s.levelBox,
-        { backgroundColor: diffColor },
-        isPremiumLocked && s.levelBoxLocked,
-        status === 'completed' && s.levelBoxCompleted,
-        status === 'in_progress' && { borderWidth: 3, borderColor: diffColor },
+        isProgressionLocked ? s.levelBoxProgressionLocked : { backgroundColor: diffColor },
+        status === 'completed' && !isProgressionLocked && s.levelBoxCompleted,
+        status === 'in_progress' && !isProgressionLocked && { borderWidth: 3, borderColor: diffColor },
       ]}
-      onPress={onPress}
-      activeOpacity={0.85}
+      onPress={isProgressionLocked ? undefined : onPress}
+      activeOpacity={isProgressionLocked ? 1 : 0.85}
     >
-      {isPremiumLocked && (
+      {/* Sort order number — always visible in center */}
+      <Text style={[s.levelNumber, isProgressionLocked && s.levelNumberLocked]}>
+        {level.sort_order}
+      </Text>
+
+      {/* Progression lock: padlock icon overlay */}
+      {isProgressionLocked && (
         <View style={s.lockOverlay}>
-          <MaterialCommunityIcons name="lock" size={22} color="rgba(255,255,255,0.9)" />
+          <MaterialCommunityIcons name="lock" size={16} color="rgba(255,255,255,0.6)" />
         </View>
       )}
-      {!isPremiumLocked && status === 'completed' && (
+
+      {/* Premium lock: crown icon (unlocked but requires purchase) */}
+      {isPremiumLocked && (
+        <View style={s.lockOverlay}>
+          <MaterialCommunityIcons name="crown" size={16} color="rgba(255,215,0,0.9)" />
+        </View>
+      )}
+
+      {/* Completed checkmark */}
+      {!isProgressionLocked && !isPremiumLocked && status === 'completed' && (
         <View style={s.levelBoxCheck}>
-          <MaterialCommunityIcons name="check" size={28} color="#FFF" />
+          <MaterialCommunityIcons name="check" size={22} color="#FFF" />
         </View>
       )}
     </TouchableOpacity>
@@ -443,6 +458,19 @@ function makeStyles(isDark: boolean, screenWidth: number) {
     },
     levelBoxLocked: {
       opacity: 0.55,
+    },
+    levelBoxProgressionLocked: {
+      backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6',
+      opacity: 0.65,
+    },
+    levelNumber: {
+      fontSize: 15,
+      fontWeight: '700' as const,
+      color: '#FFF',
+      textAlign: 'center' as const,
+    },
+    levelNumberLocked: {
+      color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)',
     },
     levelBoxCheck: {
       position: 'absolute',

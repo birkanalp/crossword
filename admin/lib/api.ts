@@ -17,6 +17,7 @@ export interface AdminPuzzleSummary {
   created_at: string;
   ai_reviewed_at: string | null;
   ai_review_score: number | null;
+  sort_order: number;
 }
 
 export interface AdminClue {
@@ -147,6 +148,28 @@ export async function adminPuzzleDecision(
     body,
     token,
   });
+}
+
+export async function adminUpdatePuzzleSortOrder(
+  token: string,
+  id: string,
+  sortOrder: number,
+): Promise<void> {
+  const base = getBaseUrl();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  const res = await fetch(`${base}/admin/puzzles/${encodeURIComponent(id)}/sort-order`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(anonKey && { apikey: anonKey }),
+    },
+    body: JSON.stringify({ sort_order: sortOrder }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? 'Failed to update sort order');
+  }
 }
 
 export async function adminMetricsOverview(

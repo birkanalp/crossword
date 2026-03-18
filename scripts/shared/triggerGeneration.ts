@@ -43,6 +43,13 @@ export async function triggerGeneration(
   // 64 zero-chars satisfy the regex and are overwritten by the script.
   const PLACEHOLDER_HASH = "0".repeat(64);
 
+  const DIFFICULTY_SCORE: Record<Difficulty, number> = {
+    easy: 25,
+    medium: 50,
+    hard: 75,
+    expert: 100,
+  };
+
   const placeholders = ids.map((id, i) => ({
     id,
     target_difficulty: opts.difficulty,
@@ -60,6 +67,9 @@ export async function triggerGeneration(
     generator_version: "placeholder",
     is_premium: false,
     difficulty_multiplier: 1.0,
+    computed_difficulty_score: DIFFICULTY_SCORE[opts.difficulty],
+    words_breakdown: {},
+    quality_score: 0,
   }));
 
   const { error } = await client.from("levels").insert(placeholders);

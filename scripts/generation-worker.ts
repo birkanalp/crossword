@@ -142,7 +142,7 @@ async function runSeedCheck(): Promise<void> {
     console.log(
       `[worker] seed check: ${difficulty} approved=${total}`,
     );
-    if (total <= SEED_THRESHOLD) {
+    if (total === SEED_THRESHOLD) {
       await generate(difficulty, SEED_COUNT);
     }
   }
@@ -179,7 +179,19 @@ console.log(`[worker] poll interval: ${POLL_INTERVAL_MS / 60000} minutes`);
 console.log(`[worker] seed: approved=0 → generate ${SEED_COUNT}`);
 console.log(`[worker] low-stock: unviewed<${LOW_STOCK_THRESHOLD} → generate ${LOW_STOCK_COUNT}`);
 
+// Graceful shutdown: clear the interval before the process exits.
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+process.on("SIGTERM", () => {
+  console.log("[worker] received SIGTERM, shutting down gracefully");
+  if (pollInterval) clearInterval(pollInterval);
+  process.exit(0);
+});
+
+// Start polling only after seed check completes. The isGenerating flags set
+// during seed check have a 10-minute TTL — the first poll fires at 30 minutes,
+// well after the locks are cleared. No risk of double-triggering.
 runSeedCheck().then(() => {
-  setInterval(runStockPoll, POLL_INTERVAL_MS);
+  pollInterval = setInterval(runStockPoll, POLL_INTERVAL_MS);
   console.log("[worker] polling started");
 });

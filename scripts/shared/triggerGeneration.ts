@@ -29,11 +29,11 @@ export interface TriggerResult {
 export async function triggerGeneration(
   opts: TriggerOptions,
 ): Promise<TriggerResult> {
+  if (opts.count < 1 || opts.count > 200) {
+    throw new Error(`count must be between 1 and 200, got ${opts.count}`);
+  }
+
   const ids: string[] = Array.from({ length: opts.count }, () => randomUUID());
-  const difficulties: Difficulty[] = Array.from(
-    { length: opts.count },
-    () => opts.difficulty,
-  );
 
   const client = createClient(opts.supabaseUrl, opts.serviceRoleKey, {
     auth: { persistSession: false },
@@ -45,8 +45,8 @@ export async function triggerGeneration(
 
   const placeholders = ids.map((id, i) => ({
     id,
-    target_difficulty: difficulties[i],
-    difficulty: difficulties[i],
+    target_difficulty: opts.difficulty,
+    difficulty: opts.difficulty,
     language: "tr",
     review_status: "generating",
     version: 1,
@@ -80,7 +80,7 @@ export async function triggerGeneration(
     "--ids",
     ids.join(","),
     "--difficulties",
-    difficulties.join(","),
+    Array(opts.count).fill(opts.difficulty).join(","),
     "--json",
   ];
   if (opts.isDaily) {

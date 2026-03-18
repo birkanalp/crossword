@@ -8,15 +8,13 @@
 -- Object naming convention: avatars/<user_id>/<filename>
 -- =============================================================================
 
--- Create the avatars bucket (public = readable by anyone without auth)
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'avatars',
-  'avatars',
-  true,           -- public read
-  5242880,        -- 5 MB max per file
-  ARRAY['image/jpeg', 'image/png', 'image/webp']
-)
+-- Create the avatars bucket.
+-- The storage init schema only has (id, name, owner, created_at, updated_at).
+-- Extended columns (public, file_size_limit, allowed_mime_types) are added by
+-- the storage API service on first startup, so we cannot reference them here.
+-- The storage API will pick up the bucket and apply sensible defaults.
+INSERT INTO storage.buckets (id, name)
+VALUES ('avatars', 'avatars')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── RLS Policies ─────────────────────────────────────────────────────────────
@@ -33,7 +31,7 @@ ON storage.objects FOR INSERT
 WITH CHECK (
   bucket_id = 'avatars'
   AND auth.role() = 'authenticated'
-  AND (storage.foldername(name))[1] = auth.uid()::text
+  AND split_part(name, '/', 1) = auth.uid()::text
 );
 
 -- Only the owner can update their own avatar
@@ -42,12 +40,12 @@ ON storage.objects FOR UPDATE
 USING (
   bucket_id = 'avatars'
   AND auth.role() = 'authenticated'
-  AND (storage.foldername(name))[1] = auth.uid()::text
+  AND split_part(name, '/', 1) = auth.uid()::text
 )
 WITH CHECK (
   bucket_id = 'avatars'
   AND auth.role() = 'authenticated'
-  AND (storage.foldername(name))[1] = auth.uid()::text
+  AND split_part(name, '/', 1) = auth.uid()::text
 );
 
 -- Only the owner can delete their own avatar
@@ -56,5 +54,5 @@ ON storage.objects FOR DELETE
 USING (
   bucket_id = 'avatars'
   AND auth.role() = 'authenticated'
-  AND (storage.foldername(name))[1] = auth.uid()::text
+  AND split_part(name, '/', 1) = auth.uid()::text
 );

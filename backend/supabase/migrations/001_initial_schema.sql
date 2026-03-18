@@ -11,6 +11,25 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- For gen_random_uuid() + SHA-256
 
 -- ---------------------------------------------------------------------------
+-- Auth function stubs
+-- These are replaced by GoTrue on its first startup. The stubs exist so that
+-- RLS policies in later migrations can reference them without compile errors.
+-- ---------------------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+  SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+$$;
+CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
+  SELECT nullif(current_setting('request.jwt.claim.role', true), '')::text;
+$$;
+CREATE OR REPLACE FUNCTION auth.email() RETURNS text LANGUAGE sql STABLE AS $$
+  SELECT nullif(current_setting('request.jwt.claim.email', true), '')::text;
+$$;
+CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Enum Types
 -- ---------------------------------------------------------------------------
 CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');

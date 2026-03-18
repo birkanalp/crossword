@@ -37,7 +37,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: level, error } = await db
     .from("levels")
     .select(
-      "id, version, difficulty, is_premium, grid_json, clues_json, answer_hash, difficulty_multiplier, review_status",
+      "id, version, difficulty, is_premium, grid_json, clues_json, answer_hash, difficulty_multiplier, review_status, has_viewed",
     )
     .eq("id", levelId)
     .eq("review_status", "approved")
@@ -88,6 +88,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     grid_json: level.grid_json,
     clues_json: sanitizedCluesJson,
   };
+
+  // Mark as viewed — fire-and-forget, must not delay the response.
+  // Guard on !level.has_viewed skips the write for already-viewed levels.
+  if (!level.has_viewed) {
+    db.from("levels")
+      .update({ has_viewed: true })
+      .eq("id", levelId)
+      .then(() => {})
+      .catch(() => {});
+  }
 
   // ── Attach caller's progress (if any) ─────────────────────────────────────
   let progress = null;

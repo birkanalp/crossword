@@ -15,19 +15,24 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # ──────────────────────────────────────────────
-# Expo / React Native (frontend/)
+# Expo / React Native (mobile/)
 # ──────────────────────────────────────────────
-frontend/.expo/
-frontend/dist/
-frontend/web-build/
-frontend/*.jks
-frontend/*.p8
-frontend/*.p12
-frontend/*.key
-frontend/*.mobileprovision
-frontend/*.orig.*
-frontend/google-services.json
-frontend/GoogleService-Info.plist
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/*.jks
+mobile/*.p8
+mobile/*.p12
+mobile/*.key
+mobile/*.mobileprovision
+mobile/*.orig.*
+mobile/google-services.json
+mobile/GoogleService-Info.plist
+
+# ──────────────────────────────────────────────
+# Next.js (frontend/)
+# ──────────────────────────────────────────────
+frontend/.next/
 
 # ──────────────────────────────────────────────
 # Supabase (backend/)
@@ -65,4 +70,4 @@ admin/.next/
 .mcp.json
 *.bz2
 
-data/
+data/.worktrees/

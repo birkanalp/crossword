@@ -163,9 +163,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .from("levels")
         .select("id")
         .eq("target_difficulty", "easy")
-        .eq("sort_order", 1)
         .eq("review_status", "approved")
         .is("deleted_at", null)
+        .order("sort_order", { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       if (firstEasy) {
@@ -196,9 +197,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .from("levels")
         .select("id")
         .eq("target_difficulty", "easy")
-        .eq("sort_order", 1)
         .eq("review_status", "approved")
         .is("deleted_at", null)
+        .order("sort_order", { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       if (firstEasy) {

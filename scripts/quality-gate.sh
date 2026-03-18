@@ -2,21 +2,23 @@
 # =============================================================================
 # Bulmaca Release Quality Gate
 #
-# Runs: frontend typecheck → frontend lint → admin typecheck → admin build
+# Runs: mobile typecheck → mobile lint → admin typecheck → admin build
 #
 # Exit code 0 = all checks passed.
 # Exit code 1 = one or more checks failed (details printed above).
 #
 # Usage:
-#   ./scripts/quality-gate.sh          # full gate
-#   ./scripts/quality-gate.sh frontend # frontend checks only
-#   ./scripts/quality-gate.sh admin    # admin checks only
+#   ./scripts/quality-gate.sh         # full gate
+#   ./scripts/quality-gate.sh mobile  # mobile (Expo) checks only
+#   ./scripts/quality-gate.sh admin   # admin checks only
+#   ./scripts/quality-gate.sh web     # web (frontend) checks only
 # =============================================================================
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FRONTEND_DIR="$REPO_ROOT/frontend"
+FRONTEND_DIR="$REPO_ROOT/mobile"
+WEB_DIR="$REPO_ROOT/frontend"
 ADMIN_DIR="$REPO_ROOT/admin"
 
 # Colour helpers (no-op if terminal doesn't support it)
@@ -46,17 +48,30 @@ run_check() {
 
 TARGET="${1:-all}"
 
-if [[ "$TARGET" == "all" || "$TARGET" == "frontend" ]]; then
+if [[ "$TARGET" == "all" || "$TARGET" == "mobile" ]]; then
   echo "========================================"
-  echo " Frontend Checks"
+  echo " Mobile Checks (Expo)"
   echo "========================================"
   echo ""
 
-  run_check "Frontend — TypeScript typecheck" \
+  run_check "Mobile — TypeScript typecheck" \
     bash -c "cd '$FRONTEND_DIR' && npx tsc --noEmit"
 
-  run_check "Frontend — ESLint" \
+  run_check "Mobile — ESLint" \
     bash -c "cd '$FRONTEND_DIR' && npx eslint . --ext .ts,.tsx --max-warnings 0"
+fi
+
+if [[ "$TARGET" == "all" || "$TARGET" == "web" ]]; then
+  echo "========================================"
+  echo " Web Checks (Next.js)"
+  echo "========================================"
+  echo ""
+
+  run_check "Web — TypeScript typecheck" \
+    bash -c "cd '$WEB_DIR' && npx tsc --noEmit"
+
+  run_check "Web — Next.js production build" \
+    bash -c "cd '$WEB_DIR' && npm run build"
 fi
 
 if [[ "$TARGET" == "all" || "$TARGET" == "admin" ]]; then

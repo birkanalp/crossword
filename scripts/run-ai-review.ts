@@ -41,7 +41,7 @@ const LIMIT = limitArg
 // ── Tipler ───────────────────────────────────────────────────────────────────
 interface ClueRecord {
   number: number;
-  clue: string;
+  question: string;
   answer_length: number;
   start: { row: number; col: number };
   answer?: string;
@@ -69,7 +69,7 @@ interface Level {
 interface BatchItem {
   dir: 'across' | 'down';
   number: number;
-  clue: string;
+  question: string;
   answer: string;
 }
 
@@ -111,7 +111,7 @@ function runDeterministicChecks(
       }
       seenNumbers.add(c.number);
 
-      if (!c.clue || c.clue.trim().length === 0) {
+      if (!c.question || c.question.trim().length === 0) {
         failures.push(`${tag} Soru metni boş`);
       }
 
@@ -160,7 +160,7 @@ async function evaluateBatch(items: BatchItem[]): Promise<number[]> {
 
   const itemLines = items.map((it, i) =>
     `${i + 1}. [${it.dir === 'across' ? 'YATAY' : 'DİKEY'} ${it.number}] ` +
-    `İpucu: "${it.clue}" | Cevap: "${it.answer}" (${it.answer.length} harf)`
+    `Soru: "${it.question}" | Cevap: "${it.answer}" (${it.answer.length} harf)`
   ).join('\n');
 
   const requiredKeys = items.map((_, i) => `score_${i + 1}`);
@@ -252,14 +252,14 @@ async function runLlmAdvisoryReview(clues: CluesJson): Promise<{
 
   for (const c of clues?.across ?? []) {
     const answer = (c.answer ?? '').trim().toUpperCase();
-    if (answer && c.clue?.trim()) {
-      items.push({ dir: 'across', number: c.number, clue: c.clue, answer });
+    if (answer && c.question?.trim()) {
+      items.push({ dir: 'across', number: c.number, question: c.question, answer });
     }
   }
   for (const c of clues?.down ?? []) {
     const answer = (c.answer ?? '').trim().toUpperCase();
-    if (answer && c.clue?.trim()) {
-      items.push({ dir: 'down', number: c.number, clue: c.clue, answer });
+    if (answer && c.question?.trim()) {
+      items.push({ dir: 'down', number: c.number, question: c.question, answer });
     }
   }
 
@@ -293,7 +293,7 @@ async function runLlmAdvisoryReview(clues: CluesJson): Promise<{
     .filter(({ s }) => s < 50)
     .sort((a, b) => a.s - b.s)
     .slice(0, 3)
-    .map(({ it, s }) => `[${it.dir === 'across' ? 'YATAY' : 'DİKEY'} ${it.number}] "${it.clue}" → "${it.answer}" (puan:${s})`);
+    .map(({ it, s }) => `[${it.dir === 'across' ? 'YATAY' : 'DİKEY'} ${it.number}] "${it.question}" → "${it.answer}" (puan:${s})`);
 
   return { passed, avgScore, lowCount, issues: worstDetails, batchCount: batches.length };
 }

@@ -71,3 +71,6 @@ admin/.next/
 *.bz2
 
 data/.worktrees/
+data/tr_corpus.txt
+data/tr_sources/dictionary.json
+data/tr_sources/tdk_word_data_all.csv

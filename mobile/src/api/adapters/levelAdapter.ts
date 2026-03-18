@@ -15,9 +15,10 @@ interface ApiGridCell {
 
 interface ApiClue {
   number: number;
-  clue: string;
+  question: string;
   answer_length: number;
   start: { row: number; col: number };
+  hint?: string;
 }
 
 interface ApiCluesJson {
@@ -163,11 +164,12 @@ function adaptClue(apiClue: ApiClue, direction: 'across' | 'down'): Clue {
     id: `${apiClue.number}${direction === 'across' ? 'A' : 'D'}`,
     number: apiClue.number,
     direction,
-    text: apiClue.clue,
+    text: apiClue.question,
     startRow: apiClue.start.row,
     startCol: apiClue.start.col,
     length: apiClue.answer_length,
     // answer intentionally omitted — backend never sends it (level.schema.json#/notes/serverOnly)
+    hint: apiClue.hint,
   };
 }
 

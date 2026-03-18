@@ -38,7 +38,7 @@ const TR_UPPER_RE = /^[A-ZÇĞİÖŞÜ]+$/;
 
 interface ClueRecord {
   number: number;
-  clue: string;
+  question: string;
   answer_length: number;
   start: { row: number; col: number };
   answer?: string;
@@ -93,7 +93,7 @@ function runDeterministicChecks(
       }
       seenNumbers.add(c.number);
 
-      if (!c.clue || c.clue.trim().length === 0) {
+      if (!c.question || c.question.trim().length === 0) {
         failures.push(`${tag} Soru metni boş`);
       }
 

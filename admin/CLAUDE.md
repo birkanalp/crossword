@@ -1,20 +1,19 @@
-# Bulmaca Admin Panel – Architecture (Claude Context)
+# Bulmaca Admin Panel – Architecture Context
 
 ## Purpose
 
-Internal web tool for reviewing, editing, approving/rejecting AI-generated crossword puzzles and monitoring game metrics. Not a public-facing app — admin access only.
+Internal web tool (local only, not deployed) for reviewing/approving AI-generated crossword puzzles, managing game content, and monitoring metrics. Admin access only.
 
 ---
 
 ## Tech Stack
 
 - **Framework:** Next.js 14 (App Router)
-- **Language:** TypeScript 5
-- **UI:** React 18 + plain CSS (no UI library)
-- **API Client:** @supabase/supabase-js 2
+- **Language:** TypeScript 5 (strict)
+- **UI:** React 18 + plain CSS (`globals.css` + inline `style` props) — no UI library
+- **API Client:** `lib/api.ts` using `adminFetch` (plain `fetch`, not Supabase JS client)
+- **Auth Client:** `@supabase/supabase-js` (browser client in `lib/supabase.ts`) — only used for auth
 - **Port (dev):** 3001
-- **Auth:** Supabase Email Auth + `app_metadata.role === 'admin'` check
-- **Puzzle generation:** spawns `npx tsx scripts/tr/generate-crossword.ts` via child process
 
 ---
 
@@ -24,29 +23,29 @@ Internal web tool for reviewing, editing, approving/rejecting AI-generated cross
 admin/
 ├── app/
 │   ├── api/
-│   │   └── generate-puzzle/
-│   │       └── route.ts          # Next.js API route – spawns generation script
-│   ├── dashboard/
-│   │   ├── layout.tsx
-│   │   └── page.tsx              # Metrics dashboard
+│   │   └── generate-puzzle/route.ts   # Spawns crossword generation script
+│   ├── dashboard/page.tsx             # Metrics overview
 │   ├── puzzles/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx              # Puzzle list with status filter + pagination
-│   │   └── [id]/
-│   │       └── page.tsx          # Puzzle review (grid + clues + approve/reject)
-│   ├── layout.tsx                # Root layout – wraps with <AuthProvider>
-│   ├── page.tsx                  # Login page (redirect to /dashboard if authed)
+│   │   ├── page.tsx                   # Puzzle list: filter, sort order editing
+│   │   └── [id]/page.tsx              # Puzzle review: grid, clues, approve/reject
+│   ├── shop/page.tsx                  # Coin packages CRUD
+│   ├── leaderboard/page.tsx           # Leaderboard stats + table + CSV export
+│   ├── todos/page.tsx                 # Engineering task tracker
+│   ├── delete-account/page.tsx        # Account deletion tool
+│   ├── layout.tsx                     # Root layout — wraps with <AuthProvider>
+│   ├── page.tsx                       # Login redirect
 │   └── globals.css
 ├── components/
-│   ├── AdminLayout.tsx           # Header nav (Dashboard / Puzzles) + logout
-│   ├── LoginForm.tsx             # Email/password form
-│   └── PuzzleGrid.tsx            # Memoized SVG grid with cell highlighting
+│   ├── AdminLayout.tsx                # Header nav + logout
+│   ├── LoginForm.tsx
+│   └── PuzzleGrid.tsx                 # Memoized SVG grid
 ├── contexts/
-│   └── AuthContext.tsx           # Supabase session state + admin role gate
+│   └── AuthContext.tsx                # Supabase session + admin role gate
 ├── lib/
-│   ├── supabase.ts               # Supabase browser client (singleton)
-│   ├── api.ts                    # All admin API calls (typed)
-│   └── puzzle-utils.ts           # Grid/clue building helpers
+│   ├── supabase.ts                    # Supabase browser client (auth only)
+│   ├── api.ts                         # Typed admin API calls via adminFetch
+│   ├── todos.ts                       # Todo types + status enum
+│   └── todos-storage.ts              # localStorage-backed todo persistence
 └── .env.local.example
 ```
 
@@ -57,142 +56,96 @@ admin/
 | Route | Purpose |
 |---|---|
 | `/` | Login page |
-| `/dashboard` | Metrics overview (plays, users, daily chart) |
-| `/puzzles` | List puzzles (filter: pending/approved/rejected, paginated) |
-| `/puzzles/[id]` | Review a single puzzle – edit clues, approve, reject |
+| `/dashboard` | Metrics overview (plays, users, ads, active users) |
+| `/puzzles` | Puzzle list — filter by status, inline sort_order editing |
+| `/puzzles/[id]` | Puzzle review — edit clues, approve/reject |
+| `/shop` | Coin packages — create, edit, reorder, delete |
+| `/leaderboard` | Leaderboard stats + entries table + CSV export |
+| `/todos` | Engineering tasks (localStorage-backed) |
+| `/delete-account` | Account deletion tool |
 
 ---
 
 ## Authentication
 
-**Flow:**
 1. User submits email + password via `LoginForm`
 2. `supabase.auth.signInWithPassword()` called
 3. `AuthContext` checks `session.user.app_metadata.role === 'admin'`
-4. Non-admin users are immediately signed out and shown an error
+4. Non-admin users are immediately signed out
 5. `AdminLayout` redirects unauthenticated visitors to `/`
 
 **Default dev credentials:** `admin@bulmaca.local` / `Admin123!`
-
 **Creating admin user:** `npm run admin:create-user` from repo root
 
 ---
 
 ## API Client (`lib/api.ts`)
 
-All calls go to Supabase Edge Functions via Kong gateway at `http://localhost:54321`.
-Auth header: `Authorization: Bearer <supabase_access_token>`
+All data calls use `adminFetch` — a typed wrapper around `fetch` that sends the Supabase access token as `Authorization: Bearer` and the anon key as `apikey`.
 
-### Key functions
+Base URL: `process.env.NEXT_PUBLIC_SUPABASE_URL/functions/v1`
 
-```typescript
-getPuzzles(status, page, limit)       → AdminPuzzleSummary[]
-getPuzzle(id)                         → AdminLevel
-updateClue(puzzleId, clueKey, patch)  → void   // PATCH clue text/answer/hint
-submitDecision(puzzleId, decision)    → void   // approve | reject (+ notes)
-getMetricsOverview()                  → MetricsOverview
-getDailyMetrics(from, to)             → DailyMetricsPoint[]
-```
-
-### Types
+### Key Types
 
 ```typescript
-AdminPuzzleSummary { id, difficulty, language, status, created_at }
-AdminLevel         { id, grid_json, clues_json, status, review_notes, ... }
-MetricsOverview    { daily_plays, total_users, paid_users, active_now }
-DailyMetricsPoint  { date, plays, completions }
+AdminPuzzleSummary {
+  id, difficulty, language,
+  review_status: 'ai_review' | 'pending' | 'approved' | 'rejected',
+  created_at, ai_reviewed_at, ai_review_score: number | null, sort_order: number
+}
+
+AdminLevel {
+  id, version, difficulty, language, is_premium,
+  grid_json: { rows, cols, cells[] },
+  clues_json: { across: AdminClue[], down: AdminClue[] },
+  review_status, review_notes, reviewed_by, reviewed_at,
+  ai_review_notes, ai_reviewed_at, ai_review_score: number | null
+}
+
+MetricsOverview { daily_plays, total_users, paid_users, active_users_15min, ads_watched_today }
+DailyMetricsPoint { date, plays, completions }
 ```
 
 ---
 
 ## Puzzle Review Workflow
 
-1. Admin opens `/puzzles` — filtered to `status=pending` by default
-2. Clicks a puzzle → `/puzzles/[id]`
-3. Reviews the SVG grid and clue list
-4. Optionally edits individual clues (text / answer / hint) via inline forms
-5. Can fill all answers or clear all
-6. Submits **Approve** (instant) or **Reject** (requires rejection notes)
-7. Decision POSTed to `/admin/puzzles/{id}/decision`
-8. Redirects back to `/puzzles`
+1. `/puzzles` — default filter: `status=pending`; shows `ai_review_score` per row
+2. Levels auto-approved if `ai_review_score >= 80`
+3. Admin can edit inline `sort_order` values and save batch changes
+4. `/puzzles/[id]` — edit clues, approve or reject (rejection requires notes)
+5. Decision POSTed to `/admin/puzzles/{id}/decision`
+6. Redirects back to `/puzzles`
 
 ---
 
 ## Puzzle Generation Flow
 
-1. Admin clicks "Yeni Bulmaca Üret" button on `/puzzles`, selects difficulty
+1. Admin clicks "Yeni Bulmaca Üret", selects difficulty
 2. Frontend POSTs to `/api/generate-puzzle` (local Next.js route)
-3. Route validates admin JWT, then spawns:
+3. Route validates admin JWT, then spawns from repo root:
    ```
    npx tsx scripts/tr/generate-crossword.ts --difficulty=<level>
    ```
-   from the repo root (`/Users/birkanalp/Desktop/Bulmaca/`)
-4. Script outputs JSON with `level_id`
-5. Route returns `{ level_id, difficulty }` to frontend
-6. Frontend redirects to `/puzzles/<level_id>` for immediate review
-
----
-
-## Component Notes
-
-### `PuzzleGrid`
-- Renders crossword grid as SVG
-- `memo()` wrapped — only re-renders when `grid_json` or `highlightedCells` change
-- Clicking a cell calls `onCellClick(row, col)`
-- Highlighted cells shown with blue background (`#6b9fff`)
-
-### `AdminLayout`
-- Must wrap every protected page
-- Calls `useAuth()` — redirects to `/` if no session
-- Header: logo, nav links, logout button
-
-### `AuthContext`
-- Provides `{ session, user, loading, signOut }`
-- Listens to `supabase.auth.onAuthStateChange`
-- Enforces `role === 'admin'` — non-admins get signed out immediately
-
----
-
-## Environment Variables
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key from .env>
-```
-
-Copy `.env.local.example` → `.env.local` and fill in the anon key from the root `.env`.
-
----
-
-## Running Locally
-
-```bash
-# From repo root — start Supabase stack first
-npm run docker:up
-
-# Then start admin dev server
-npm run admin:dev        # → http://localhost:3001
-
-# Or from admin/ directory
-npm run dev
-```
+4. Script outputs JSON with `level_id`; route returns `{ level_id, difficulty }`
+5. Frontend redirects to `/puzzles/<level_id>` for immediate review
 
 ---
 
 ## Styling Conventions
 
-- Dark theme throughout: background `#1a1a22`, text `#e8e8ed`
-- Accent blue: `#6b9fff`
-- No external CSS framework — plain CSS in `globals.css` + inline `style` props
-- All UI strings are in **Turkish**
-- Difficulty labels: Kolay / Orta / Zor / Uzman (Easy / Medium / Hard / Expert)
+- Dark theme: background `#1a1a22`, text `#e8e8ed`
+- Accent: `#6b9fff`
+- No CSS framework — `globals.css` + inline `style` props
+- All UI strings in **Turkish**
+- Difficulty labels: Kolay / Orta / Zor / Uzman
 
 ---
 
 ## Critical Rules
 
-- Never expose admin routes or API to unauthenticated users — always check `role === 'admin'`
-- Never modify `grid_json` structure — only `clues_json` fields are editable in review
-- The generation script path is relative to repo root — the Next.js API route must `cwd` to repo root when spawning the process
-- Admin panel only runs locally — not deployed; no production build needed
-- All API errors should be surfaced to the admin user (no silent failures)
+- Always check `role === 'admin'` — never expose admin routes to unauthenticated users
+- Never modify `grid_json` — only `clues_json` fields are editable in review
+- Puzzle generation script must `cwd` to repo root when spawning
+- All API errors must surface to the admin user — no silent failures
+- Admin panel is local-only — no production deployment

@@ -83,7 +83,7 @@
 
     "Clue": {
       "type": "object",
-      "required": ["number", "clue", "answer_length", "start"],
+      "required": ["number", "question", "answer_length", "start"],
       "additionalProperties": false,
       "properties": {
         "number": {
@@ -91,10 +91,10 @@
           "minimum": 1,
           "description": "Clue display number. Placeholder generator output may omit GridCell.number; use start coordinates as the authoritative clue anchor."
         },
-        "clue": {
+        "question": {
           "type": "string",
           "minLength": 1,
-          "description": "Human-readable clue text shown to the player."
+          "description": "The puzzle question (soru) shown to the player. Previously named 'clue'."
         },
         "answer_length": {
           "type": "integer",
@@ -109,6 +109,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Server-only at-rest answer string used by backend generation/scoring workflows. Never returned in public getLevel payloads."
+        },
+        "hint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional bonus hint (ipucu) unlocked by the player via coins or rewarded ad. Never shown until the player pays."
         }
       }
     },

@@ -144,8 +144,11 @@ export interface ListLevelsResponse {
 // ─── UUID validation ─────────────────────────────────────────────────────────
 // Contract: getLevel requires id as UUID (api.contract.json#/endpoints/getLevel/queryParams/id)
 
+// Relaxed: accept any well-formed UUID regardless of version/variant bits.
+// The strict [1-5] version and [89ab] variant check was rejecting valid IDs
+// (e.g. variant-2 or non-standard UUIDs that exist in the database).
 const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isValidLevelId(id: string): boolean {
   return UUID_REGEX.test(id);

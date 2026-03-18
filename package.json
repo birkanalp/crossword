@@ -4,7 +4,7 @@
   "private": true,
   "description": "Crossword puzzle game – monorepo root",
   "scripts": {
-    "install:all": "cd frontend && npm install && cd ../admin && npm install",
+    "install:all": "cd mobile && npm install && cd ../admin && npm install && cd ../frontend && npm install",
     "admin:dev": "cd admin && npm run dev",
     "admin:create-user": "tsx scripts/create-admin-user.ts",
     "admin:add-user": "docker compose exec -T db psql -U postgres -d postgres -f - < backend/supabase/scripts/add_admin_user.sql",
@@ -14,9 +14,10 @@
     "docker:logs": "docker compose logs -f",
     "docker:reset": "docker compose down -v && docker compose up -d --wait",
     "docker:ps": "docker compose ps",
-    "start": "npm run docker:up && cd frontend && npx expo start",
-    "start:ios": "npm run docker:up && cd frontend && npx expo start --ios",
-    "start:android": "npm run docker:up && cd frontend && npx expo start --android",
+    "web:dev": "cd frontend && npm run dev",
+    "start": "npm run docker:up && cd mobile && npx expo start",
+    "start:ios": "npm run docker:up && cd mobile && npx expo start --ios",
+    "start:android": "npm run docker:up && cd mobile && npx expo start --android",
     "studio": "open http://localhost:54323",
     "inbucket": "open http://localhost:54324",
     "db:reset": "docker compose rm -fsv db && docker volume rm bulmaca_db-data 2>/dev/null; docker compose up db -d --wait",
@@ -29,7 +30,8 @@
     "generate:crossword": "tsx scripts/tr/generate-crossword.ts",
     "generate:one": "docker compose exec db psql -U postgres -d postgres -c \"select * from run_generation_job_once('tr');\"",
     "quality-gate": "bash scripts/quality-gate.sh",
-    "quality-gate:frontend": "bash scripts/quality-gate.sh frontend",
+    "quality-gate:mobile": "bash scripts/quality-gate.sh mobile",
+    "quality-gate:web": "bash scripts/quality-gate.sh web",
     "quality-gate:admin": "bash scripts/quality-gate.sh admin"
   },
   "devDependencies": {

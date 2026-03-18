@@ -13,7 +13,7 @@ export interface AdminPuzzleSummary {
   id: string;
   difficulty: string;
   language: string;
-  review_status: 'ai_review' | 'pending' | 'approved' | 'rejected';
+  review_status: 'generating' | 'ai_review' | 'pending' | 'approved' | 'rejected';
   created_at: string;
   ai_reviewed_at: string | null;
   ai_review_score: number | null;

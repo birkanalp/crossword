@@ -1383,7 +1383,7 @@
         "id": { "type": "string", "format": "uuid" },
         "difficulty": { "type": "string", "enum": ["easy", "medium", "hard", "expert"] },
         "language": { "type": "string", "minLength": 2 },
-        "review_status": { "type": "string", "enum": ["ai_review", "pending", "approved", "rejected"] },
+        "review_status": { "type": "string", "enum": ["generating", "ai_review", "pending", "approved", "rejected"] },
         "created_at": { "type": "string", "format": "date-time" },
         "ai_reviewed_at": { "type": ["string", "null"], "format": "date-time", "description": "When AI review completed; null if not yet reviewed" }
       }
@@ -1391,15 +1391,15 @@
 
     "AdminClue": {
       "type": "object",
-      "required": ["number", "clue", "answer_length", "start", "answer", "hint"],
+      "required": ["number", "question", "answer_length", "start", "answer", "hint"],
       "additionalProperties": false,
       "properties": {
         "number": { "type": "integer", "minimum": 1 },
-        "clue": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1, "description": "The puzzle question (soru) shown to the player." },
         "answer_length": { "type": "integer", "minimum": 1 },
         "start": { "$ref": "level.schema.json#/definitions/ClueStart" },
         "answer": { "type": "string", "minLength": 1 },
-        "hint": { "type": "string", "minLength": 1 }
+        "hint": { "type": "string", "minLength": 1, "description": "Bonus hint (ipucu) unlocked by player via coins or rewarded ad." }
       }
     },
 
@@ -1447,7 +1447,7 @@
         "is_premium": { "type": "boolean" },
         "grid_json": { "$ref": "level.schema.json#/definitions/GridJson" },
         "clues_json": { "$ref": "#/components/AdminCluesJson" },
-        "review_status": { "type": "string", "enum": ["ai_review", "pending", "approved", "rejected"] },
+        "review_status": { "type": "string", "enum": ["generating", "ai_review", "pending", "approved", "rejected"] },
         "review_notes": { "type": ["string", "null"] },
         "reviewed_by": { "type": ["string", "null"], "format": "uuid" },
         "reviewed_at": { "type": ["string", "null"], "format": "date-time" },

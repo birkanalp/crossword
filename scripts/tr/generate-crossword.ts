@@ -10,6 +10,8 @@ type CliOptions = {
   dryRun: boolean;
   count: number;
   json: boolean;
+  ids?: string[];
+  difficulties?: Difficulty[];
 };
 
 type DifficultyProfile = {
@@ -68,10 +70,11 @@ type NumberedCell = {
 
 type Clue = {
   number: number;
-  clue: string;
+  question: string;
   answer: string;
   answer_length: number;
   start: { row: number; col: number };
+  hint?: string;
 };
 
 type GridJson = {
@@ -127,6 +130,8 @@ function parseArgs(argv: string[]): CliOptions {
   let dryRun = false;
   let count = 1;
   let json = false;
+  let ids: string[] | undefined;
+  let difficulties: Difficulty[] | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -160,10 +165,35 @@ function parseArgs(argv: string[]): CliOptions {
       i += 1;
       continue;
     }
+    if (arg === "--ids") {
+      const value = argv[i + 1];
+      if (!value) {
+        throw new Error("--ids expects a comma-separated list of UUIDs");
+      }
+      ids = value.split(",").filter(Boolean);
+      count = ids.length;
+      i += 1;
+      continue;
+    }
+    if (arg === "--difficulties") {
+      const value = argv[i + 1];
+      if (!value) {
+        throw new Error("--difficulties expects a comma-separated list of difficulty values");
+      }
+      const parts = value.split(",").filter(Boolean);
+      for (const part of parts) {
+        if (!DIFFICULTIES.includes(part as Difficulty)) {
+          throw new Error(`--difficulties: invalid value "${part}", expected one of: easy|medium|hard|expert`);
+        }
+      }
+      difficulties = parts as Difficulty[];
+      i += 1;
+      continue;
+    }
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { difficulty, daily, dryRun, count, json };
+  return { difficulty, daily, dryRun, count, json, ids, difficulties };
 }
 
 function randomDifficulty(): Difficulty {
@@ -414,7 +444,7 @@ function difficultyMultiplier(difficulty: Difficulty): number {
   return 2.5;
 }
 
-function createClueText(word: string, definition: string | null): string {
+function createQuestionText(word: string, definition: string | null): string {
   const cleaned = (definition ?? "").trim();
   if (cleaned.length > 0) return cleaned;
   return `Tanım: "${word}"`;
@@ -472,7 +502,7 @@ function finalizeLevel(size: number, placements: Placement[]): FinalizedLevel {
     if (!number) continue;
     const clue: Clue = {
       number,
-      clue: createClueText(p.word, p.definition),
+      question: createQuestionText(p.word, p.definition),
       answer: p.word,
       answer_length: p.word.length,
       start: { row: p.row, col: p.col },
@@ -524,12 +554,12 @@ function renderGrid(gridJson: GridJson, cluesJson: CluesJson): string {
   lines.push("");
   lines.push("Across:");
   for (const clue of cluesJson.across) {
-    lines.push(`  ${clue.number}. (${clue.answer_length}) ${clue.clue} [${clue.answer}]`);
+    lines.push(`  ${clue.number}. (${clue.answer_length}) ${clue.question} [${clue.answer}]`);
   }
   lines.push("");
   lines.push("Down:");
   for (const clue of cluesJson.down) {
-    lines.push(`  ${clue.number}. (${clue.answer_length}) ${clue.clue} [${clue.answer}]`);
+    lines.push(`  ${clue.number}. (${clue.answer_length}) ${clue.question} [${clue.answer}]`);
   }
   return lines.join("\n");
 }
@@ -706,6 +736,77 @@ async function loadEligibleWords(
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Hint generation via Ollama
+// Called after puzzle finalization; graceful degradation if Ollama unavailable.
+// ---------------------------------------------------------------------------
+
+async function generateHintsForClues(cluesJson: CluesJson, ollamaBaseUrl: string): Promise<void> {
+  const entries: { key: string; question: string; answer: string }[] = [];
+  for (const c of cluesJson.across) {
+    if (c.question && c.answer) entries.push({ key: `${c.number}A`, question: c.question, answer: c.answer });
+  }
+  for (const c of cluesJson.down) {
+    if (c.question && c.answer) entries.push({ key: `${c.number}D`, question: c.question, answer: c.answer });
+  }
+  if (entries.length === 0) return;
+
+  const lines = entries.map((e) => `[${e.key}] Soru: "${e.question}" | Cevap: "${e.answer}"`).join("\n");
+  const promptText =
+    `Sen bir Türkçe bulmaca ipucu yazarısın. Her soru-cevap çifti için kısa bir ipucu üret.\n` +
+    `İpucu: Cevabı doğrudan verme, oyuncuyu yönlendir (1-2 cümle, Türkçe).\n` +
+    `İpucu cümle içinde boşluk bırakarak kelimeyi ima edebilir. Örnek: "Askerler .....nın surlarına çıkmıştı."\n` +
+    `Aile dostu ve net olsun.\n\n` +
+    `Soru-Cevap listesi:\n${lines}\n\n` +
+    `SADECE geçerli JSON döndür (başka hiçbir şey ekleme). Her anahtar için ipucu metni:\n` +
+    `{ "hints": { "1A": "ipucu metni", "2D": "ipucu metni", ... } }`;
+
+  const ollamaModel = process.env.OLLAMA_MODEL ?? "qwen2.5:3b";
+
+  try {
+    const res = await fetch(`${ollamaBaseUrl}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(60_000),
+      body: JSON.stringify({
+        model: ollamaModel,
+        prompt: promptText,
+        stream: false,
+        format: {
+          type: "object",
+          properties: {
+            hints: { type: "object", additionalProperties: { type: "string" } },
+          },
+          required: ["hints"],
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      console.warn(`[generate-crossword] Ollama hint generation HTTP ${res.status} — skipping hints`);
+      return;
+    }
+
+    const data = await res.json();
+    const content = (data.response ?? "") as string;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return;
+    const parsed = JSON.parse(jsonMatch[0]) as { hints?: Record<string, string> };
+    const hintsMap = parsed.hints ?? {};
+
+    for (const c of cluesJson.across) {
+      const h = hintsMap[`${c.number}A`];
+      if (typeof h === "string" && h.trim()) c.hint = h.trim();
+    }
+    for (const c of cluesJson.down) {
+      const h = hintsMap[`${c.number}D`];
+      if (typeof h === "string" && h.trim()) c.hint = h.trim();
+    }
+  } catch (e) {
+    console.warn(`[generate-crossword] Hint generation failed (Ollama unavailable?) — skipping: ${e}`);
+  }
+}
+
 async function persistGeneratedLevel(
   client: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number }> },
   generated: GenerationResult,
@@ -800,6 +901,122 @@ async function persistGeneratedLevel(
   }
 }
 
+async function updateGeneratedLevel(
+  client: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number }> },
+  levelId: string,
+  generated: GenerationResult,
+  profile: DifficultyProfile,
+  dailyDate: string | null,
+): Promise<PersistedResult> {
+  const version = 1;
+  const sortedWordIds = [...generated.placements.map((p) => p.wordId)].sort();
+  const solutionHash = hashSha256(sortedWordIds.join("|"));
+  const answerKeys = Object.keys(generated.finalized.answerMap).sort(naturalClueSort);
+  const sortedAnswers = answerKeys.map((k) => generated.finalized.answerMap[k]).join(":");
+  const answerHash = hashSha256(`${levelId}:${version}:${sortedAnswers}`);
+  const wordsBreakdown = generated.wordsBreakdown;
+
+  await client.query("BEGIN");
+  try {
+    await client.query(
+      `UPDATE levels SET
+         version = $2,
+         difficulty = $3::difficulty_level,
+         target_difficulty = $3::difficulty_level,
+         computed_difficulty_score = $4,
+         grid_size = $5,
+         word_count = $6,
+         words_breakdown = $7::jsonb,
+         quality_score = $8,
+         grid_json = $9::jsonb,
+         clues_json = $10::jsonb,
+         answer_hash = $11,
+         solution_hash = $12,
+         generator_version = $13,
+         difficulty_multiplier = $14,
+         review_status = 'ai_review',
+         updated_at = NOW()
+       WHERE id = $1`,
+      [
+        levelId,
+        version,
+        generated.targetDifficulty,
+        generated.computedDifficultyScore,
+        generated.gridSize,
+        generated.placements.length,
+        JSON.stringify(wordsBreakdown),
+        generated.qualityScore,
+        JSON.stringify(generated.finalized.gridJson),
+        JSON.stringify(generated.finalized.cluesJson),
+        answerHash,
+        solutionHash,
+        GENERATOR_VERSION,
+        difficultyMultiplier(generated.targetDifficulty),
+      ],
+    );
+
+    for (const placement of generated.placements) {
+      await client.query(
+        `INSERT INTO level_words (level_id, word_id, direction, start_x, start_y, length)
+         VALUES ($1, $2, $3::word_direction, $4, $5, $6)`,
+        [levelId, placement.wordId, placement.direction, placement.col, placement.row, placement.word.length],
+      );
+    }
+
+    await client.query(
+      `INSERT INTO word_usage (word_id, used_count, last_used_at, cooldown_until, locked)
+       SELECT x.word_id::uuid, 1, now(), now() + make_interval(days => $2::int), FALSE
+       FROM unnest($1::text[]) AS x(word_id)
+       ON CONFLICT (word_id) DO UPDATE
+       SET used_count = word_usage.used_count + 1,
+           last_used_at = EXCLUDED.last_used_at,
+           cooldown_until = EXCLUDED.cooldown_until,
+           updated_at = now()`,
+      [sortedWordIds, profile.cooldownDays],
+    );
+
+    if (dailyDate) {
+      await client.query(
+        `INSERT INTO daily_challenges (id, date, level_id, leaderboard_enabled, created_at)
+         VALUES (gen_random_uuid(), $1::date, $2::uuid, TRUE, now())
+         ON CONFLICT (date) DO UPDATE SET
+           level_id = EXCLUDED.level_id,
+           leaderboard_enabled = EXCLUDED.leaderboard_enabled`,
+        [dailyDate, levelId],
+      );
+    }
+
+    await client.query("COMMIT");
+    return { levelId, answerHash, solutionHash };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
+}
+
+async function triggerAiReviewAndWait(levelId: string): Promise<void> {
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  if (!supabaseUrl || !serviceKey) {
+    console.warn(`[generate-crossword] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set — skipping AI review for ${levelId}`);
+    return;
+  }
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/admin/puzzles/${levelId}/ai-review`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceKey}`,
+        "apikey": anonKey,
+      },
+      signal: AbortSignal.timeout(120_000),
+    });
+  } catch (e) {
+    console.warn(`[generate-crossword] AI review failed for ${levelId}: ${e}`);
+  }
+}
+
 function buildGenerationResult(
   targetDifficulty: Difficulty,
   profile: DifficultyProfile,
@@ -850,6 +1067,96 @@ async function main(): Promise<void> {
   const client = await pool.connect();
   try {
     const profiles = await loadProfiles(client);
+
+    // ── NEW: pre-allocated ID mode (called from admin route) ────────────────
+    if (options.ids && options.ids.length > 0) {
+      const wordCache = new Map<Difficulty, Record<Difficulty, WordCandidate[]>>();
+      const runResults: Array<{ generated: GenerationResult; persisted: PersistedResult | null; dailyDate: string | null }> = [];
+
+      for (let i = 0; i < options.ids.length; i += 1) {
+        const levelId = options.ids[i]!;
+        const targetDifficulty = (options.difficulties?.[i] ?? options.difficulty ?? randomDifficulty()) as Difficulty;
+        const profile = profiles[targetDifficulty];
+
+        let candidatesByDifficulty = wordCache.get(targetDifficulty);
+        if (!candidatesByDifficulty) {
+          candidatesByDifficulty = await loadEligibleWords(client, profile);
+          wordCache.set(targetDifficulty, candidatesByDifficulty);
+        }
+
+        const totalEligible = DIFFICULTIES.reduce((acc, d) => acc + candidatesByDifficulty![d].length, 0);
+        if (totalEligible < profile.minWords) {
+          log(`[generate-crossword] #${i + 1}/${options.ids.length}: not enough eligible words for ${targetDifficulty} — skipping`);
+          continue;
+        }
+
+        const build = generateForProfile(profile, candidatesByDifficulty);
+        if (!build) {
+          log(`[generate-crossword] #${i + 1}/${options.ids.length}: layout algorithm failed for ${targetDifficulty} — skipping`);
+          continue;
+        }
+
+        const dailyDate = options.daily ? ymdFromDate(new Date(Date.now() + i * 86_400_000)) : null;
+        const generated = buildGenerationResult(targetDifficulty, profile, build.gridSize, build.placements, build.targetWords);
+
+        if (!options.dryRun) {
+          const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+          await generateHintsForClues(generated.finalized.cluesJson, ollamaBaseUrl);
+        }
+
+        const persisted = options.dryRun ? null : await updateGeneratedLevel(client, levelId, generated, profile, dailyDate);
+        runResults.push({ generated, persisted, dailyDate });
+      }
+
+      // Sequential AI review — one at a time, blocking
+      if (!options.dryRun) {
+        for (const item of runResults) {
+          if (item.persisted) {
+            log(`[generate-crossword] Triggering AI review for ${item.persisted.levelId}...`);
+            await triggerAiReviewAndWait(item.persisted.levelId);
+          }
+        }
+      }
+
+      for (let i = 0; i < runResults.length; i += 1) {
+        const item = runResults[i];
+        const g = item.generated;
+        const intersectionCount = g.placements.reduce((acc, p) => acc + p.intersections, 0);
+        log(`\n=== Generated #${i + 1} ===`);
+        log(
+          `difficulty=${g.targetDifficulty} grid=${g.gridSize} words=${g.placements.length} quality=${g.qualityScore} difficultyScore=${g.computedDifficultyScore.toFixed(2)} intersections=${intersectionCount}`,
+        );
+        log(
+          `words_breakdown easy=${g.wordsBreakdown.easy} medium=${g.wordsBreakdown.medium} hard=${g.wordsBreakdown.hard} expert=${g.wordsBreakdown.expert}`,
+        );
+        if (item.dailyDate) log(`daily_date=${item.dailyDate}`);
+        if (item.persisted) {
+          log(`level_id=${item.persisted.levelId}`);
+          log(`solution_hash=${item.persisted.solutionHash}`);
+          log(`answer_hash=${item.persisted.answerHash}`);
+        } else {
+          log(`dry_solution_hash=${g.solutionHash}`);
+          log(`dry_answer_hash_placeholder_level=${g.answerHash}`);
+        }
+        log(renderGrid(g.finalized.gridJson, g.finalized.cluesJson));
+      }
+
+      if (options.json) {
+        const last = runResults[runResults.length - 1]!;
+        const levelIds = runResults.map((r) => r.persisted?.levelId).filter(Boolean) as string[];
+        const out: Record<string, unknown> = {
+          success: true,
+          difficulty: last?.generated.targetDifficulty,
+          ...(options.ids.length > 1 ? { level_ids: levelIds } : { level_id: levelIds[0] ?? null }),
+        };
+        if (options.dryRun) out.dry_run = true;
+        console.log(JSON.stringify(out));
+      }
+
+      return;
+    }
+    // ── END NEW: pre-allocated ID mode ──────────────────────────────────────
+
     const runResults: Array<{ generated: GenerationResult; persisted: PersistedResult | null; dailyDate: string | null }> = [];
 
     for (let i = 0; i < options.count; i += 1) {
@@ -858,18 +1165,36 @@ async function main(): Promise<void> {
       const candidatesByDifficulty = await loadEligibleWords(client, profile);
       const totalEligible = DIFFICULTIES.reduce((acc, d) => acc + candidatesByDifficulty[d].length, 0);
       if (totalEligible < profile.minWords) {
-        throw new Error(
-          `Not enough eligible words for ${targetDifficulty}: found ${totalEligible}, need at least ${profile.minWords}`,
-        );
+        // In batch mode stop gracefully instead of crashing — partial results are
+        // already committed to the DB and will be returned in JSON output.
+        if (!options.json) {
+          console.warn(
+            `[generate-crossword] #${i + 1}/${options.count}: not enough eligible words for ${targetDifficulty} ` +
+            `(found ${totalEligible}, need ${profile.minWords}) — stopping early`,
+          );
+        }
+        break;
       }
 
       const build = generateForProfile(profile, candidatesByDifficulty);
       if (!build) {
-        throw new Error(`Failed to generate playable crossword for ${targetDifficulty} after retries`);
+        if (!options.json) {
+          console.warn(
+            `[generate-crossword] #${i + 1}/${options.count}: layout algorithm failed for ${targetDifficulty} — stopping early`,
+          );
+        }
+        break;
       }
 
       const generated = buildGenerationResult(targetDifficulty, profile, build.gridSize, build.placements, build.targetWords);
       const dailyDate = options.daily ? ymdFromDate(new Date(Date.now() + i * 86_400_000)) : null;
+
+      // Generate hints via Ollama before persisting (graceful degradation if unavailable)
+      if (!options.dryRun) {
+        const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+        await generateHintsForClues(generated.finalized.cluesJson, ollamaBaseUrl);
+      }
+
       const persisted = options.dryRun ? null : await persistGeneratedLevel(client, generated, profile, dailyDate);
       runResults.push({ generated, persisted, dailyDate });
 

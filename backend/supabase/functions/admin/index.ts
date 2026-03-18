@@ -29,7 +29,7 @@
 import { handleCors, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin, isValidUUID, serviceClient } from "../_shared/auth.ts";
 import { computeLevelAnswerHash } from "../_shared/anticheat.ts";
-import { fetchLeaderboardEntries } from "../getLeaderboard/index.ts";
+import { fetchLeaderboardEntries } from "../_shared/leaderboard.ts";
 import {
   runDeterministicChecks,
   runLlmAdvisoryReview,
@@ -40,7 +40,7 @@ import {
 
 interface ClueRecord {
   number: number;
-  clue: string;
+  question: string;
   answer_length: number;
   start: { row: number; col: number };
   answer?: string;
@@ -198,7 +198,7 @@ async function handleListPuzzles(url: URL): Promise<Response> {
     .select("id, difficulty, language, review_status, created_at, ai_reviewed_at, ai_review_score, sort_order", { count: "exact" })
     .is("deleted_at", null);
 
-  if (status && ["pending", "approved", "rejected", "ai_review"].includes(status)) {
+  if (status && ["pending", "approved", "rejected", "ai_review", "generating"].includes(status)) {
     query = query.eq("review_status", status);
   }
 
@@ -358,7 +358,7 @@ async function handlePatchClue(id: string, clueKey: string, req: Request): Promi
   }
 
   const updated = { ...list[idx] };
-  if (body.text !== undefined) updated.clue = body.text.trim();
+  if (body.text !== undefined) updated.question = body.text.trim();
   if (body.answer !== undefined) updated.answer = body.answer.trim().toUpperCase();
   if (body.hint !== undefined) updated.hint = body.hint.trim();
 
@@ -1298,18 +1298,18 @@ async function handleGenerateHints(id: string): Promise<Response> {
   }
 
   const clues = level.clues_json as CluesJson;
-  const entries: { key: string; clue: string; answer: string }[] = [];
+  const entries: { key: string; question: string; answer: string }[] = [];
 
   for (const c of clues?.across ?? []) {
     const hint = (c.hint ?? "").trim();
-    if (!hint && c.clue && c.answer) {
-      entries.push({ key: `${c.number}A`, clue: c.clue, answer: c.answer });
+    if (!hint && c.question && c.answer) {
+      entries.push({ key: `${c.number}A`, question: c.question, answer: c.answer });
     }
   }
   for (const c of clues?.down ?? []) {
     const hint = (c.hint ?? "").trim();
-    if (!hint && c.clue && c.answer) {
-      entries.push({ key: `${c.number}D`, clue: c.clue, answer: c.answer });
+    if (!hint && c.question && c.answer) {
+      entries.push({ key: `${c.number}D`, question: c.question, answer: c.answer });
     }
   }
 
@@ -1317,7 +1317,7 @@ async function handleGenerateHints(id: string): Promise<Response> {
     return jsonResponse({ updated: 0, message: "All clues already have hints" });
   }
 
-  const lines = entries.map((e) => `[${e.key}] Soru: "${e.clue}" | Cevap: "${e.answer}"`).join("\n");
+  const lines = entries.map((e) => `[${e.key}] Soru: "${e.question}" | Cevap: "${e.answer}"`).join("\n");
 
   const promptText = `Sen bir Türkçe bulmaca ipucu yazarısın. Her soru-cevap çifti için kısa bir ipucu üret.
 İpucu: Cevabı doğrudan verme, oyuncuyu yönlendir (1-2 cümle, Türkçe).

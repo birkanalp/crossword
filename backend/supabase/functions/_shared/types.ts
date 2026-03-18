@@ -25,9 +25,10 @@ export interface GridJson {
 
 export interface Clue {
   number: number;
-  clue: string;
+  question: string;
   answer_length: number;
   start: { row: number; col: number };
+  hint?: string;
 }
 
 export interface CluesJson {

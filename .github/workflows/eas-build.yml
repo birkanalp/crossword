@@ -18,10 +18,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Install deps
-        run: cd frontend && npm ci
+        run: cd mobile && npm ci
 
       - uses: expo/expo-github-action@v8
         with:
@@ -30,8 +30,8 @@ jobs:
 
       - name: EAS Build (Preview on PR)
         if: github.event_name == 'pull_request'
-        run: cd frontend && eas build --profile preview --platform all --non-interactive
+        run: cd mobile && eas build --profile preview --platform all --non-interactive
 
       - name: EAS Build + Submit (Production on master push)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: cd frontend && eas build --profile production --platform all --non-interactive --auto-submit
+        run: cd mobile && eas build --profile production --platform all --non-interactive --auto-submit

@@ -15,7 +15,7 @@
 
 export interface ClueRecord {
   number: number;
-  clue: string;
+  question: string;
   answer_length: number;
   start: { row: number; col: number };
   answer?: string;
@@ -74,8 +74,8 @@ export function runDeterministicChecks(
       }
       seenNumbers.add(c.number);
 
-      // Empty clue text
-      if (!c.clue || c.clue.trim().length === 0) {
+      // Empty question text
+      if (!c.question || c.question.trim().length === 0) {
         failures.push(`${tag} Soru metni boş`);
       }
 
@@ -152,7 +152,7 @@ const BATCH_SIZE = 8;
 interface BatchItem {
   dir: "across" | "down";
   number: number;
-  clue: string;
+  question: string;
   answer: string;
 }
 
@@ -203,7 +203,7 @@ async function evaluateBatch(
     .map(
       (it, i) =>
         `${i + 1}. [${it.dir === "across" ? "YATAY" : "DİKEY"} ${it.number}] ` +
-        `İpucu: "${it.clue}" | Cevap: "${it.answer}" (${it.answer.length} harf)`,
+        `Soru: "${it.question}" | Cevap: "${it.answer}" (${it.answer.length} harf)`,
     )
     .join("\n");
 
@@ -216,24 +216,24 @@ async function evaluateBatch(
 
   const promptText =
     `Sen bir Türkçe çapraz bulmaca kalite denetçisisin.\n` +
-    `Aşağıdaki ${items.length} ipucu-cevap çiftini BAĞIMSIZ olarak değerlendir.\n` +
+    `Aşağıdaki ${items.length} soru-cevap çiftini BAĞIMSIZ olarak değerlendir.\n` +
     `Her çifti tek başına ele al. Önceki değerlendirmelerden bağımsız düşün.\n\n` +
     `Her çift için 0-100 arası kalite puanı ver:\n` +
-    `- 85-100: İpucu net, anlamlı, cevap doğru eşleşiyor, Türkçe hatasız\n` +
+    `- 85-100: Soru net, anlamlı, cevap doğru eşleşiyor, Türkçe hatasız\n` +
     `- 60-84: Küçük sorunlar var ama kabul edilebilir\n` +
-    `- 30-59: İpucu belirsiz, anlamsız veya cevapla zayıf eşleşme\n` +
+    `- 30-59: Soru belirsiz, anlamsız veya cevapla zayıf eşleşme\n` +
     `- 0-29: Çok kötü, anlamsız, sayı/kod, eşleşmiyor\n\n` +
     `KRİTİK KURALLAR (bu kurallardan herhangi birini ihlal eden çifte 0 puan ver):\n` +
-    `1. İpucu tek başına anlamlı bir Türkçe cümle veya tanım olmalı. Sayı, kod, "0", "343 tekrar tekrar" gibi anlamsız metinler → 0 puan.\n` +
+    `1. Soru tek başına anlamlı bir Türkçe cümle veya tanım olmalı. Sayı, kod, "0", "343 tekrar tekrar" gibi anlamsız metinler → 0 puan.\n` +
     `2. Cevap anlamlı bir Türkçe kelime veya özel isim olmalı. Rastgele harf dizileri → 0 puan.\n` +
-    `3. İpucu metninde cevap kelimesi geçMEMELİ. Cevabı doğrudan içeren ipucu → 0 puan.\n` +
-    `4. Cevap gerçekten ipucunun karşılığı olmalı. İpucu "başkent" diyorsa cevap bir başkent olmalı → eşleşmiyorsa 0 puan.\n\n` +
+    `3. Soru metninde cevap kelimesi geçMEMELİ. Cevabı doğrudan içeren soru → 0 puan.\n` +
+    `4. Cevap gerçekten sorunun karşılığı olmalı. Soru "başkent" diyorsa cevap bir başkent olmalı → eşleşmiyorsa 0 puan.\n\n` +
     `DİĞER KRİTERLER:\n` +
-    `5. İpucu ile cevap anlamsal olarak eşleşiyor mu?\n` +
+    `5. Soru ile cevap anlamsal olarak eşleşiyor mu?\n` +
     `6. Türkçe doğru yazılmış mı?\n` +
     `7. İçerik aile dostu mu?\n` +
-    `8. İpucu bulmaca standartlarına uygun mu (kısa, net)?\n\n` +
-    `İPUÇLARI VE CEVAPLAR:\n${itemLines}\n\n` +
+    `8. Soru bulmaca standartlarına uygun mu (kısa, net)?\n\n` +
+    `SORULAR VE CEVAPLAR:\n${itemLines}\n\n` +
     `SADECE şu ${requiredKeys.length} anahtar ile JSON döndür: ${requiredKeys.join(", ")}\n` +
     `Başka anahtar veya açıklama ekleme.\n\nJSON:`;
 
@@ -243,7 +243,7 @@ async function evaluateBatch(
     signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       model: ollamaModel,
-      system: "Sen bir Türkçe çapraz bulmaca kalite denetçisisin. Her istekte sana verilen ipucu-cevap çiftlerini BAĞIMSIZ değerlendir. Önceki isteklerden hiçbir bilgi taşıma.",
+      system: "Sen bir Türkçe çapraz bulmaca kalite denetçisisin. Her istekte sana verilen soru-cevap çiftlerini BAĞIMSIZ değerlendir. Önceki isteklerden hiçbir bilgi taşıma.",
       prompt: promptText,
       stream: false,
       context: [],  // Ollama context'i sıfırla — önceki istek kalıntısı taşımasın
@@ -285,14 +285,14 @@ export async function runLlmAdvisoryReview(
 
   for (const c of clues?.across ?? []) {
     const answer = (c.answer ?? "").trim().toUpperCase();
-    if (answer && c.clue?.trim()) {
-      items.push({ dir: "across", number: c.number, clue: c.clue, answer });
+    if (answer && c.question?.trim()) {
+      items.push({ dir: "across", number: c.number, question: c.question, answer });
     }
   }
   for (const c of clues?.down ?? []) {
     const answer = (c.answer ?? "").trim().toUpperCase();
-    if (answer && c.clue?.trim()) {
-      items.push({ dir: "down", number: c.number, clue: c.clue, answer });
+    if (answer && c.question?.trim()) {
+      items.push({ dir: "down", number: c.number, question: c.question, answer });
     }
   }
 

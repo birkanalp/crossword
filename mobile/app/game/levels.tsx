@@ -336,7 +336,8 @@ function LevelBox({
     <TouchableOpacity
       style={[
         s.levelBox,
-        isProgressionLocked ? s.levelBoxProgressionLocked : { backgroundColor: diffColor },
+        { backgroundColor: diffColor },
+        isProgressionLocked && s.levelBoxProgressionLocked,
         status === 'completed' && !isProgressionLocked && s.levelBoxCompleted,
         status === 'in_progress' && !isProgressionLocked && { borderWidth: 3, borderColor: diffColor },
       ]}
@@ -351,7 +352,7 @@ function LevelBox({
       {/* Progression lock: padlock icon overlay */}
       {isProgressionLocked && (
         <View style={s.lockOverlay}>
-          <MaterialCommunityIcons name="lock" size={16} color="rgba(255,255,255,0.6)" />
+          <MaterialCommunityIcons name="lock" size={16} color="rgba(255,255,255,0.7)" />
         </View>
       )}
 
@@ -460,8 +461,7 @@ function makeStyles(isDark: boolean, screenWidth: number) {
       opacity: 0.55,
     },
     levelBoxProgressionLocked: {
-      backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6',
-      opacity: 0.65,
+      opacity: 0.38,
     },
     levelNumber: {
       fontSize: 15,
@@ -470,7 +470,7 @@ function makeStyles(isDark: boolean, screenWidth: number) {
       textAlign: 'center' as const,
     },
     levelNumberLocked: {
-      color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)',
+      color: '#FFF',
     },
     levelBoxCheck: {
       position: 'absolute',

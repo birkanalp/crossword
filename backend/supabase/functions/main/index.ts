@@ -17,7 +17,9 @@ const createWorker = async (servicePath: string) => {
   return await EdgeRuntime.userWorkers.create({
     servicePath,
     memoryLimitMb: 150,
-    workerTimeoutMs: 5 * 60 * 1000,
+    // 15 minutes: AI review (Ollama 7b) can take 2-3 min per puzzle;
+    // 5 min was too short when the worker had already been alive a while.
+    workerTimeoutMs: 15 * 60 * 1000,
     noModuleCache: false,
     envVars,
     forceCreate: false,

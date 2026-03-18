@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { spawn } from 'child_process';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'] as const;
 type Difficulty = (typeof DIFFICULTIES)[number];
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
   }
 
-  let body: { difficulty?: string; count?: number };
+  let body: { difficulty?: string; count?: number; daily?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -64,122 +65,81 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const isDaily = body?.daily === true;
+
+  // Create service-role client for inserting placeholder records
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json(
+      { error: 'Server misconfiguration: missing Supabase service credentials' },
+      { status: 500 }
+    );
+  }
+
+  const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  // Pre-allocate UUIDs and pick difficulty for each puzzle
+  const ids: string[] = Array.from({ length: count }, () => randomUUID());
+  const difficulties: Difficulty[] = Array.from({ length: count }, () => difficulty);
+
+  // Batch INSERT placeholder rows
+  const placeholders = ids.map((id, i) => ({
+    id,
+    target_difficulty: difficulties[i],
+    difficulty: difficulties[i],
+    language: 'tr',
+    review_status: 'generating',
+    version: 1,
+    auto_generated: true,
+    clues_json: { across: [], down: [] },
+    grid_json: { rows: 0, cols: 0, cells: [] },
+    answer_hash: '',
+    solution_hash: '',
+    word_count: 0,
+    grid_size: 0,
+    generator_version: 'placeholder',
+    is_premium: false,
+    difficulty_multiplier: 1.0,
+  }));
+
+  const { error: insertError } = await serviceClient
+    .from('levels')
+    .insert(placeholders);
+
+  if (insertError) {
+    return NextResponse.json(
+      { error: `Failed to create placeholder records: ${insertError.message}` },
+      { status: 500 }
+    );
+  }
+
   const projectRoot = path.resolve(process.cwd(), '..');
   const scriptPath = path.join(projectRoot, 'scripts', 'tr', 'generate-crossword.ts');
 
-  // Batch mode (count > 1): fire-and-forget, return 202 immediately
-  if (count > 1) {
-    const child = spawn(
-      'npx',
-      ['tsx', scriptPath, '--difficulty', difficulty, '--count', String(count), '--json'],
-      {
-        cwd: projectRoot,
-        env: { ...process.env },
-        detached: true,
-        stdio: 'ignore',
-      }
-    );
-    child.unref();
-    return NextResponse.json(
-      { accepted: true, count, difficulty },
-      { status: 202 }
-    );
+  const scriptArgs = [
+    'tsx',
+    scriptPath,
+    '--ids', ids.join(','),
+    '--difficulties', difficulties.join(','),
+    '--json',
+  ];
+  if (isDaily) {
+    scriptArgs.push('--daily');
   }
 
-  type GenResult = {
-    success: boolean;
-    level_id?: string | null;
-    level_ids?: string[];
-    difficulty?: string;
-    error?: string;
-  };
+  const child = spawn('npx', scriptArgs, {
+    cwd: projectRoot,
+    env: { ...process.env },
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
 
-  const runGenerator = (): Promise<GenResult> =>
-    new Promise((resolve, reject) => {
-      const child = spawn(
-        'npx',
-        ['tsx', scriptPath, '--difficulty', difficulty, '--count', '1', '--json'],
-        {
-          cwd: projectRoot,
-          env: { ...process.env },
-          stdio: ['ignore', 'pipe', 'pipe'],
-        }
-      );
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
-      child.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
-
-      child.on('close', (code) => {
-        const lines = stdout.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        if (lastLine) {
-          try {
-            const parsed = JSON.parse(lastLine) as GenResult;
-            resolve({
-              success: !!parsed.success,
-              level_id: parsed.level_id ?? null,
-              level_ids: Array.isArray(parsed.level_ids) ? parsed.level_ids : undefined,
-              difficulty: parsed.difficulty,
-              error: parsed.error,
-            });
-            return;
-          } catch {
-            // fall through
-          }
-        }
-        if (code !== 0) {
-          resolve({ success: false, error: stderr.trim() || stdout.trim() || `Script exited with code ${code}` });
-        } else {
-          resolve({ success: false, error: 'Generation completed but no level_id(s) returned' });
-        }
-      });
-
-      child.on('error', (err) => reject(err));
-    });
-
-  const MAX_RETRIES = 3;
-  const RETRYABLE_ERROR = 'Failed to generate playable crossword';
-
-  const runAiReview = async (levelId: string) => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
-    const adminJwt = req.headers.get('authorization')?.slice(7) ?? '';
-    try {
-      await fetch(`${supabaseUrl}/functions/v1/admin/puzzles/${levelId}/ai-review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminJwt}`,
-          'apikey': anonKey,
-        },
-      });
-    } catch {
-      // AI review başarısız — bulmaca olduğu gibi kalır
-    }
-  };
-
-  // Tekil üretim: mevcut retry mantığı korunuyor
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const result = await runGenerator();
-      if (result.success && result.level_id) {
-        await runAiReview(result.level_id);
-        return NextResponse.json({ level_id: result.level_id, difficulty });
-      }
-      const isRetryable = result.error?.includes(RETRYABLE_ERROR);
-      if (!isRetryable || attempt === MAX_RETRIES) {
-        return NextResponse.json({ error: result.error ?? 'Generation failed' }, { status: 500 });
-      }
-      // "Failed to generate playable crossword" durumunda tekrar dene (algoritma olasılıksal)
-    } catch (err) {
-      if (attempt === MAX_RETRIES) {
-        return NextResponse.json({ error: String((err as Error).message) }, { status: 500 });
-      }
-    }
-  }
-
-  return NextResponse.json({ error: 'Generation failed after retries' }, { status: 500 });
+  return NextResponse.json(
+    { accepted: true, count, difficulty, placeholder_ids: ids },
+    { status: 202 }
+  );
 }

@@ -23,7 +23,7 @@ Run `npm run prebuild` (or `npm run prebuild:clean` for a clean slate) when:
 ## Adding a New SDK
 
 ```bash
-cd frontend
+cd mobile
 npx expo install <package-name>   # installs correct version
 npm run prebuild                  # regenerates native config
 cd ios && pod install             # iOS — install native pods

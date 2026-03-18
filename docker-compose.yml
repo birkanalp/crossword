@@ -4,6 +4,7 @@
 # Services:
 #   db        → PostgreSQL + Supabase extensions   (port 54322)
 #   cron      → Puzzle generation (scripts/tr/generate-crossword.ts, every 5 min)
+#   generation-worker → Puzzle inventory management (seeds on boot, polls every 30 min)
 #   auth      → GoTrue (Supabase Auth)
 #   rest      → PostgREST (auto REST API)
 #   realtime  → Supabase Realtime
@@ -319,6 +320,25 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}@db:5432/${POSTGRES_DB:-postgres}
       CRON_TRIGGER_AI_URL: http://kong:8000/functions/v1/cronTriggerAiReview
       CRON_SECRET: ${CRON_SECRET:-cron-trigger-ai-secret}
+
+  # ── Generation worker ────────────────────────────────────────────────────────
+  # Seeds 100 puzzles per difficulty on first boot (when approved count = 0).
+  # Polls every 30 min: generates 50 more for any difficulty with <10 unviewed.
+  generation-worker:
+    build:
+      context: .
+      dockerfile: docker/generation-worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      kong:
+        # Kong defines a healthcheck (CMD: kong health) so service_healthy works.
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-your-super-secret-and-long-postgres-password}@db:5432/${POSTGRES_DB:-postgres}
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hj04zWl196z2-SBc0}
 
   # ── Inbucket (local email) ───────────────────────────────────────────────────
   inbucket:

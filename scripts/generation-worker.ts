@@ -5,7 +5,7 @@ import { triggerGeneration } from "./shared/triggerGeneration";
 type Difficulty = "easy" | "medium" | "hard" | "expert";
 
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "expert"];
-const SEED_THRESHOLD = 0;         // generate if approved count equals this
+const SEED_THRESHOLD = 0;         // seed only when count === 0 (not <=); partial states handled by stock poll
 const SEED_COUNT = 100;           // how many to generate on first boot
 const LOW_STOCK_THRESHOLD = 10;   // generate if unviewed approved < this
 const LOW_STOCK_COUNT = 50;       // how many to generate when low
@@ -191,7 +191,11 @@ process.on("SIGTERM", () => {
 // Start polling only after seed check completes. The isGenerating flags set
 // during seed check have a 10-minute TTL — the first poll fires at 30 minutes,
 // well after the locks are cleared. No risk of double-triggering.
-runSeedCheck().then(() => {
-  pollInterval = setInterval(runStockPoll, POLL_INTERVAL_MS);
-  console.log("[worker] polling started");
-});
+runSeedCheck()
+  .then(() => {
+    pollInterval = setInterval(runStockPoll, POLL_INTERVAL_MS);
+    console.log("[worker] polling started");
+  })
+  .catch((err) => {
+    console.error("[worker] fatal error in seed check:", err);
+  });

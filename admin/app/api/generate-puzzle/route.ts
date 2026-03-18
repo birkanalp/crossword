@@ -96,8 +96,10 @@ export async function POST(req: NextRequest) {
     auto_generated: true,
     clues_json: { across: [], down: [] },
     grid_json: { rows: 0, cols: 0, cells: [] },
-    answer_hash: '',
-    solution_hash: '',
+    // Satisfies CHECK (answer_hash ~ '^[0-9a-f]{64}$') for placeholder rows.
+    // The generation script overwrites these with real hashes on completion.
+    answer_hash: '0'.repeat(64),
+    solution_hash: '0'.repeat(64),
     word_count: 0,
     grid_size: 0,
     generator_version: 'placeholder',

@@ -1,20 +1,19 @@
-import Constants from 'expo-constants';
 import { captureError } from '@/lib/sentry';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── API Client ───────────────────────────────────────────────────────────────
 // Targets Supabase Edge Functions.
 // Base URL pattern: ${SUPABASE_URL}/functions/v1
 // Contract: api.contract.json#/baseUrl
 
-const SUPABASE_URL: string =
-  (Constants.expoConfig?.extra?.supabaseUrl as string | undefined) ?? '';
+const SUPABASE_URL = runtimeConfig.supabaseUrl ?? '';
 
 export const API_BASE_URL = SUPABASE_URL
   ? `${SUPABASE_URL}/functions/v1`
   : '';
 
-if (!SUPABASE_URL && !__DEV__) {
-  console.error('[api/client] supabaseUrl is not configured in app.json extra');
+if (!SUPABASE_URL && runtimeConfig.isReleaseLike) {
+  console.error('[api/client] SUPABASE_URL is not configured for this release-like build');
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────

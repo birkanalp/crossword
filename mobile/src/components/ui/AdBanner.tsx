@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import Constants from 'expo-constants';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── AdBanner ────────────────────────────────────────────────────────────────
 //
@@ -29,8 +29,8 @@ function getBannerAdUnitId(TestIds: { BANNER: string }): string {
   if (__DEV__) return TestIds.BANNER;
   return (
     Platform.select({
-      ios: Constants.expoConfig?.extra?.admobBannerIos as string | undefined,
-      android: Constants.expoConfig?.extra?.admobBannerAndroid as string | undefined,
+      ios: runtimeConfig.admobBannerIos,
+      android: runtimeConfig.admobBannerAndroid,
     }) || TestIds.BANNER
   );
 }

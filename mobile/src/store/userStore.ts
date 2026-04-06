@@ -22,8 +22,8 @@ interface UserActions {
   /** Called after loading from AsyncStorage */
   hydrateUser: (user: AppUser, profile: UserProfile | null, streak: StreakState) => void;
 
-  /** TODO: Replace with real auth after backend integration */
-  loginUser: (user: AppUser, profile: UserProfile) => void;
+  /** Sets the authenticated session resolved from Supabase Auth */
+  setAuthenticatedUser: (user: AppUser, profile: UserProfile | null) => void;
 
   /** Update profile fields (e.g., after earning coins) */
   updateProfile: (patch: Partial<UserProfile>) => void;
@@ -40,8 +40,8 @@ interface UserActions {
   /** Called on app launch to refresh streak state for the new day */
   refreshStreak: () => void;
 
-  /** Log out — reverts to guest */
-  logout: () => void;
+  /** Replace the current session with a guest user */
+  setGuestUser: (guest: AppUser, profile: UserProfile | null) => void;
 }
 
 // ─── Default Streak ───────────────────────────────────────────────────────────
@@ -82,10 +82,7 @@ export const useUserStore = create<UserState & UserActions>()(
       set({ user, profile, streak: refreshedStreak, isHydrated: true });
     },
 
-    loginUser: (user, profile) => {
-      // Guest progress merge is handled by useLoginWithMerge hook —
-      // call that hook's `loginWithMerge()` instead of this action directly
-      // whenever the merge API needs to run (i.e. after Apple/Google sign-in).
+    setAuthenticatedUser: (user, profile) => {
       set({ user, profile });
     },
 
@@ -119,11 +116,10 @@ export const useUserStore = create<UserState & UserActions>()(
       set({ streak: refreshStreakForNewDay(streak) });
     },
 
-    logout: () => {
-      const guest = createGuestUser();
+    setGuestUser: (guest, profile) => {
       set({
         user: guest,
-        profile: null,
+        profile,
         streak: defaultStreak,
       });
     },

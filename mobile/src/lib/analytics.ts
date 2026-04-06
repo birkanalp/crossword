@@ -6,7 +6,7 @@
 // Configure POSTHOG_API_KEY in app.json extra.posthogApiKey.
 // Configure POSTHOG_HOST in app.json extra.posthogHost (optional, defaults to posthog.com).
 
-import Constants from 'expo-constants';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── Client-Fired Event Types ─────────────────────────────────────────────────
 // Source: CONTRACTS/events.contract.md — Section 1. Client-Fired Events
@@ -60,11 +60,8 @@ export function initAnalytics(userId: string): void {
     return;
   }
 
-  const apiKey =
-    (Constants.expoConfig?.extra?.posthogApiKey as string | undefined) ?? '';
-  const host =
-    (Constants.expoConfig?.extra?.posthogHost as string | undefined) ??
-    'https://us.i.posthog.com';
+  const apiKey = runtimeConfig.posthogApiKey ?? '';
+  const host = runtimeConfig.posthogHost;
 
   if (!apiKey || apiKey.startsWith('phc_YOUR')) {
     if (__DEV__) {

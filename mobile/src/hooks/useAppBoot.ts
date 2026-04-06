@@ -6,6 +6,7 @@ import { setUserContext } from '@/lib/sentry';
 import { initAnalytics } from '@/lib/analytics';
 import { initRevenueCat } from '@/lib/revenuecat';
 import { createGuestUser } from '@/domain/user/guest';
+import { getCurrentSession, buildAuthenticatedUser, createDefaultProfile } from '@/lib/supabase';
 
 // ─── App Boot Hook ────────────────────────────────────────────────────────────
 // Runs on first mount. Restores persisted user + settings, or creates guest.
@@ -27,12 +28,26 @@ export function useAppBoot(): { isReady: boolean } {
           hydrateSettings({});
         }
 
-        // 2. Restore or create user
+        // 2. Resolve the current auth session. Supabase session is the source of truth.
         const savedUser = await loadUser();
+        const savedProfile = await loadProfile();
+        const savedStreak = await loadStreak();
+        const session = await getCurrentSession();
 
-        if (savedUser) {
-          const savedProfile = await loadProfile();
-          const savedStreak = await loadStreak();
+        if (session) {
+          const guestId = savedUser?.type === 'guest' ? savedUser.guestId : savedUser?.guestId ?? null;
+          const authenticatedUser = buildAuthenticatedUser(session, guestId, savedProfile);
+          hydrateUser(
+            authenticatedUser,
+            savedProfile ?? createDefaultProfile(authenticatedUser.id, authenticatedUser.username),
+            savedStreak ?? {
+              currentStreak: 0,
+              longestStreak: 0,
+              lastClaimedDate: null,
+              isTodayClaimed: false,
+            },
+          );
+        } else if (savedUser) {
           hydrateUser(
             savedUser,
             savedProfile,

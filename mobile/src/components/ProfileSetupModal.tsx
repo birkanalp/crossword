@@ -11,7 +11,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import Constants from 'expo-constants';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -92,8 +92,7 @@ export function ProfileSetupModal({
       // Profile data is stored via PostgREST (/rest/v1/profiles), NOT an edge function.
       // We construct the URL from SUPABASE_URL directly to avoid the /functions/v1 prefix
       // that apiRequest always prepends.
-      const supabaseUrl =
-        (Constants.expoConfig?.extra?.supabaseUrl as string | undefined) ?? '';
+      const supabaseUrl = runtimeConfig.supabaseUrl ?? '';
 
       if (supabaseUrl) {
         const headers: Record<string, string> = {

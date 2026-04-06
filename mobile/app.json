@@ -66,26 +66,6 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "1828f3ad-8c17-4753-b35e-7174026dcb70"
-      },
-      "supabaseUrl": "http://localhost:54321",
-      "sentryDsn": "",
-      "revenueCatApiKeyIos": "",
-      "revenueCatApiKeyAndroid": "",
-      "admobBannerIos": "",
-      "admobBannerAndroid": "",
-      "admobInterstitialIos": "",
-      "admobInterstitialAndroid": "",
-      "admobRewardedIos": "",
-      "admobRewardedAndroid": "",
-      "posthogApiKey": "",
-      "posthogHost": "https://us.i.posthog.com"
-    },
     "updates": {
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/1828f3ad-8c17-4753-b35e-7174026dcb70"

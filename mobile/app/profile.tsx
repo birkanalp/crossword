@@ -21,6 +21,8 @@ import {
 import { Colors } from '@/constants/colors';
 import { restorePurchases, ENTITLEMENTS } from '@/lib/revenuecat';
 import { apiRequest } from '@/api/client';
+import { signOutFromSupabase } from '@/lib/supabase';
+import { useProfile } from '@/api/hooks/useProfile';
 
 // ─── Profile Screen ───────────────────────────────────────────────────────────
 
@@ -33,7 +35,7 @@ export default function ProfileScreen() {
   const user = useUserStore(selectUser);
   const profile = useUserStore(selectProfile);
   const streak = useUserStore(selectStreak);
-  const logout = useUserStore((s) => s.logout);
+  const setAuthenticatedUser = useUserStore((s) => s.setAuthenticatedUser);
 
   // ─── Settings store ───────────────────────────────────────────────────────
   const soundEnabled = useSettingsStore(selectSoundEnabled);
@@ -56,6 +58,18 @@ export default function ProfileScreen() {
 
   const authToken =
     user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
+  const remoteProfile = useProfile(user?.type === 'authenticated' ? user.id : null, authToken);
+
+  React.useEffect(() => {
+    if (user?.type !== 'authenticated' || !remoteProfile.data) return;
+    setAuthenticatedUser(user, {
+      ...profile,
+      ...remoteProfile.data,
+      coins: profile?.coins ?? remoteProfile.data.coins,
+      streak: profile?.streak ?? remoteProfile.data.streak,
+      isPremium: profile?.isPremium ?? remoteProfile.data.isPremium,
+    });
+  }, [remoteProfile.data, setAuthenticatedUser, user, profile]);
 
   const handleDeleteAccount = useCallback(() => {
     Alert.alert(
@@ -81,7 +95,7 @@ export default function ProfileScreen() {
                 Alert.alert('Hata', result.error);
                 return;
               }
-              logout();
+              await signOutFromSupabase().catch(() => undefined);
               router.replace('/');
               Alert.alert('Hesap Silindi', 'Hesabınız başarıyla silindi.');
             } catch {
@@ -93,7 +107,7 @@ export default function ProfileScreen() {
         },
       ],
     );
-  }, [authToken, logout, router]);
+  }, [authToken, router]);
 
   const handleLogout = useCallback(() => {
     Alert.alert(
@@ -104,14 +118,19 @@ export default function ProfileScreen() {
         {
           text: 'Çıkış Yap',
           style: 'destructive',
-          onPress: () => {
-            logout();
-            router.replace('/');
+            onPress: async () => {
+              try {
+                await signOutFromSupabase();
+              } catch {
+                Alert.alert('Hata', 'Cikis yapilamadi. Lütfen tekrar deneyin.');
+                return;
+              }
+              router.replace('/');
+            },
           },
-        },
-      ],
-    );
-  }, [logout, router]);
+        ],
+      );
+  }, [router]);
 
   const handleRestorePurchases = useCallback(async () => {
     setRestoring(true);
@@ -120,6 +139,12 @@ export default function ProfileScreen() {
       const hasPremium =
         info?.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined;
       if (hasPremium) {
+        if (profile && user?.type === 'authenticated') {
+          setAuthenticatedUser(user, {
+            ...profile,
+            isPremium: true,
+          });
+        }
         Alert.alert(
           'Satın Alımlar Geri Yüklendi',
           'Premium erişiminiz aktifleştirildi.',
@@ -135,7 +160,7 @@ export default function ProfileScreen() {
     } finally {
       setRestoring(false);
     }
-  }, []);
+  }, [profile, setAuthenticatedUser, user]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

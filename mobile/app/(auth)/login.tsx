@@ -1,15 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme } from 'react-native';
+import { Alert, Text, StyleSheet, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/ui/Button';
 import { Colors } from '@/constants/colors';
-
-// ─── Login Screen ─────────────────────────────────────────────────────────────
-// Skeleton only. TODO: Implement Apple/Google sign-in + backend auth flow.
-//
-// When real sign-in is wired up, call `loginWithMerge(user, profile)` from
-// the `useLoginWithMerge` hook INSTEAD of `loginUser` directly — this
-// triggers POST /mergeGuestProgress to carry over guest progress.
+import { runtimeConfig } from '@/config/runtime';
+import { beginOAuthSignIn } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -17,8 +12,34 @@ export default function LoginScreen() {
   const isDark = scheme === 'dark';
   const styles = makeStyles(isDark);
 
+  const providers = [
+    {
+      key: 'apple',
+      label: 'Apple ile Giriş Yap',
+      enabled: runtimeConfig.authAppleEnabled,
+      variant: 'primary' as const,
+    },
+    {
+      key: 'google',
+      label: 'Google ile Giriş Yap',
+      enabled: runtimeConfig.authGoogleEnabled,
+      variant: 'secondary' as const,
+    },
+  ];
+
   const handleGuestContinue = () => {
     router.back();
+  };
+
+  const handleProviderSignIn = async (provider: 'apple' | 'google') => {
+    try {
+      await beginOAuthSignIn(provider);
+    } catch (error) {
+      Alert.alert(
+        'Giris Baslatilamadi',
+        error instanceof Error ? error.message : 'Beklenmeyen bir hata oluştu.',
+      );
+    }
   };
 
   return (
@@ -26,25 +47,24 @@ export default function LoginScreen() {
       <Text style={styles.title}>Bulmaca</Text>
       <Text style={styles.subtitle}>Oturum aç veya misafir olarak devam et</Text>
 
-      {/* TODO: Implement Apple Sign-In */}
-      <Button
-        label="Apple ile Giriş Yap"
-        onPress={() => {
-          /* TODO */
-        }}
-        variant="primary"
-        style={styles.btn}
-      />
+      {providers.map((provider) => (
+        <Button
+          key={provider.key}
+          label={provider.label}
+          onPress={() => {
+            void handleProviderSignIn(provider.key as 'apple' | 'google');
+          }}
+          variant={provider.variant}
+          style={styles.btn}
+          disabled={!provider.enabled}
+        />
+      ))}
 
-      {/* TODO: Implement Google Sign-In */}
-      <Button
-        label="Google ile Giriş Yap"
-        onPress={() => {
-          /* TODO */
-        }}
-        variant="secondary"
-        style={styles.btn}
-      />
+      {!runtimeConfig.authAppleEnabled && !runtimeConfig.authGoogleEnabled ? (
+        <Text style={styles.providerHint}>
+          Bu buildde sosyal giriş kapalı. Provider ayarlari açıldığında aynı ekran gerçek OAuth akışını kullanacak.
+        </Text>
+      ) : null}
 
       <Button
         label="Misafir olarak devam et"
@@ -80,6 +100,14 @@ function makeStyles(isDark: boolean) {
     },
     btn: {
       width: '100%',
+    },
+    providerHint: {
+      color: isDark ? Colors.textOnDarkSecondary : Colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: 'center',
+      marginTop: -4,
+      marginBottom: 4,
     },
   });
 }

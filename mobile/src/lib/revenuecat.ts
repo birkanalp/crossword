@@ -1,14 +1,14 @@
 import Purchases, { type CustomerInfo, type PurchasesPackage } from 'react-native-purchases';
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { captureError } from './sentry';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── RevenueCat SDK Scaffold ──────────────────────────────────────────────────
 // TODO: Add real product IDs and entitlement identifiers from RevenueCat dashboard.
 
 const API_KEY = Platform.select({
-  ios: Constants.expoConfig?.extra?.revenueCatApiKeyIos as string | undefined ?? '',
-  android: Constants.expoConfig?.extra?.revenueCatApiKeyAndroid as string | undefined ?? '',
+  ios: runtimeConfig.revenueCatApiKeyIos ?? '',
+  android: runtimeConfig.revenueCatApiKeyAndroid ?? '',
 }) ?? '';
 
 export const ENTITLEMENTS = {

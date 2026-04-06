@@ -29,7 +29,7 @@ export interface MergeResult {
  *   Response: { merged_count: number; skipped_count: number }
  */
 export function useLoginWithMerge() {
-  const loginUser = useUserStore((s) => s.loginUser);
+  const setAuthenticatedUser = useUserStore((s) => s.setAuthenticatedUser);
   const currentUser = useUserStore((s) => s.user);
   const [isMerging, setIsMerging] = useState(false);
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
@@ -41,7 +41,7 @@ export function useLoginWithMerge() {
         currentUser?.type === 'guest' ? currentUser.guestId : null;
 
       // Step 1: update the Zustand store (navigates away from guest session)
-      loginUser(newUser, profile);
+      setAuthenticatedUser(newUser, profile);
 
       // Step 2: merge guest progress if a guest session existed
       const jwt = newUser.type === 'authenticated' ? newUser.jwt : undefined;
@@ -69,7 +69,7 @@ export function useLoginWithMerge() {
         setIsMerging(false);
       }
     },
-    [currentUser, loginUser],
+    [currentUser, setAuthenticatedUser],
   );
 
   return { loginWithMerge, isMerging, mergeResult };

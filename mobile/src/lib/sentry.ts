@@ -1,11 +1,10 @@
 import * as Sentry from '@sentry/react-native';
-import Constants from 'expo-constants';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── Sentry Initialisation ────────────────────────────────────────────────────
 // Call initSentry() once at the very top of app/_layout.tsx before any rendering.
 
-const DSN: string =
-  (Constants.expoConfig?.extra?.sentryDsn as string | undefined) ?? '';
+const DSN = runtimeConfig.sentryDsn ?? '';
 
 export function initSentry(): void {
   if (!DSN || !DSN.startsWith('https://')) {
@@ -18,7 +17,7 @@ export function initSentry(): void {
     // Disable in development to avoid flooding Sentry
     enabled: !__DEV__,
     tracesSampleRate: 0.2,
-    environment: __DEV__ ? 'development' : 'production',
+    environment: runtimeConfig.appEnv,
   });
 }
 

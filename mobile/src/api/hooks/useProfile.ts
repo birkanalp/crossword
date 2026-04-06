@@ -5,6 +5,33 @@ import type { UserProfile } from '@/domain/user/types';
 import type { FilledCells, Clue } from '@/domain/crossword/types';
 import { buildSubmitScoreBody } from '../adapters/scoreAdapter';
 
+interface ApiProfileResponse {
+  user_id: string;
+  username: string | null;
+  avatar_color: string | null;
+  levels_completed: number;
+  total_score: number;
+  best_score: number;
+  total_time_spent: number;
+  total_entries: number;
+  created_at: string | null;
+}
+
+function adaptProfileResponse(response: ApiProfileResponse): UserProfile {
+  return {
+    userId: response.user_id,
+    totalScore: response.total_score,
+    levelsCompleted: response.levels_completed,
+    coins: 0,
+    streak: 0,
+    lastActiveDate: new Date().toISOString().slice(0, 10),
+    isPremium: false,
+    rank: response.total_entries > 0 ? response.total_entries : null,
+    ...(response.username ? { username: response.username } : {}),
+    ...(response.avatar_color ? { avatarColor: response.avatar_color } : {}),
+  };
+}
+
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const profileKeys = {
@@ -24,12 +51,12 @@ export function useProfile(userId: string | null, authToken?: string) {
     queryKey: profileKeys.detail(userId ?? ''),
     queryFn: async ({ signal }) => {
       if (!userId) throw new Error('No user ID');
-      const response = await apiRequest<UserProfile>(
+      const response = await apiRequest<ApiProfileResponse>(
         '/getProfile',
         { ...(authToken ? { authToken } : {}), signal },
       );
-      if (response.error) throw new Error(response.error);
-      return response.data;
+      if (response.error || !response.data) throw new Error(response.error ?? 'No profile data');
+      return adaptProfileResponse(response.data);
     },
     enabled: userId !== null,
   });

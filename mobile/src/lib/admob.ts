@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
+import { runtimeConfig } from '@/config/runtime';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,12 +29,8 @@ function getRewardedAdUnitId(): string {
   const { TestIds } = mod;
   if (__DEV__) return TestIds.REWARDED;
   return Platform.select({
-    ios:
-      (Constants.expoConfig?.extra?.admobRewardedIos as string | undefined) ||
-      TestIds.REWARDED,
-    android:
-      (Constants.expoConfig?.extra?.admobRewardedAndroid as string | undefined) ||
-      TestIds.REWARDED,
+    ios: runtimeConfig.admobRewardedIos || TestIds.REWARDED,
+    android: runtimeConfig.admobRewardedAndroid || TestIds.REWARDED,
     default: TestIds.REWARDED,
   }) as string;
 }
@@ -101,12 +97,8 @@ function getInterstitialAdUnitId(): string {
   const { TestIds } = mod;
   if (__DEV__) return TestIds.INTERSTITIAL;
   return Platform.select({
-    ios:
-      (Constants.expoConfig?.extra?.admobInterstitialIos as string | undefined) ||
-      TestIds.INTERSTITIAL,
-    android:
-      (Constants.expoConfig?.extra?.admobInterstitialAndroid as string | undefined) ||
-      TestIds.INTERSTITIAL,
+    ios: runtimeConfig.admobInterstitialIos || TestIds.INTERSTITIAL,
+    android: runtimeConfig.admobInterstitialAndroid || TestIds.INTERSTITIAL,
     default: TestIds.INTERSTITIAL,
   }) as string;
 }

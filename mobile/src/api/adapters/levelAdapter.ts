@@ -169,7 +169,7 @@ function adaptClue(apiClue: ApiClue, direction: 'across' | 'down'): Clue {
     startCol: apiClue.start.col,
     length: apiClue.answer_length,
     // answer intentionally omitted — backend never sends it (level.schema.json#/notes/serverOnly)
-    hint: apiClue.hint,
+    ...(apiClue.hint ? { hint: apiClue.hint } : {}),
   };
 }
 

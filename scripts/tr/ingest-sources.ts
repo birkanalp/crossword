@@ -374,16 +374,17 @@ async function parseTdkWordDataAll(
 async function upsertWords(map: Map<string, WordEntry>): Promise<void> {
   const pool = createPool();
   const client = await pool.connect();
-  const BATCH_SIZE = 500;
+  const BATCH_SIZE = 1000;
   const entries = [...map.values()];
   let upserted = 0;
 
   try {
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
       const batch = entries.slice(i, i + BATCH_SIZE);
-      await client.query("BEGIN");
+      const values: string[] = [];
+      const params: Array<string | number | null> = [];
 
-      for (const entry of batch) {
+      batch.forEach((entry, idx) => {
         const definition =
           entry.definitions.length > 0
             ? entry.definitions.reduce((a, b) => (b.length > a.length ? b : a), "")
@@ -392,19 +393,23 @@ async function upsertWords(map: Map<string, WordEntry>): Promise<void> {
         const tags: Record<string, unknown> = { sources: entry.sources };
         if (entry.pos) tags.pos = entry.pos;
 
-        await client.query(
-          `INSERT INTO words (language, word, length, difficulty, tags, definition, clue_source)
-           VALUES ('tr', $1, $2, 'medium'::difficulty_level, $3::jsonb, $4, 'definition')
-           ON CONFLICT (language, word) DO UPDATE SET
-             definition = CASE WHEN LENGTH(EXCLUDED.definition) > LENGTH(COALESCE(words.definition,''))
-                               THEN EXCLUDED.definition ELSE words.definition END,
-             tags = words.tags || EXCLUDED.tags,
-             clue_source = COALESCE(words.clue_source, EXCLUDED.clue_source),
-             updated_at = now()`,
-          [entry.word, entry.word.length, JSON.stringify(tags), definition],
-        );
-      }
+        const base = idx * 4;
+        values.push(`('tr', $${base + 1}, $${base + 2}, 'medium'::difficulty_level, $${base + 3}::jsonb, $${base + 4}, 'definition')`);
+        params.push(entry.word, entry.word.length, JSON.stringify(tags), definition);
+      });
 
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO words (language, word, length, difficulty, tags, definition, clue_source)
+         VALUES ${values.join(",\n")}
+         ON CONFLICT (language, word) DO UPDATE SET
+           definition = CASE WHEN LENGTH(EXCLUDED.definition) > LENGTH(COALESCE(words.definition,''))
+                             THEN EXCLUDED.definition ELSE words.definition END,
+           tags = words.tags || EXCLUDED.tags,
+           clue_source = COALESCE(words.clue_source, EXCLUDED.clue_source),
+           updated_at = now()`,
+        params,
+      );
       await client.query("COMMIT");
       upserted += batch.length;
 

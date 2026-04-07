@@ -21,6 +21,7 @@ type DropReason =
 type CliOptions = {
   dropTopPercent: number;
   dropBottomPercent: number;
+  batchSize: number;
 };
 
 type WordRow = {
@@ -47,6 +48,7 @@ function parsePercent(raw: string, flag: string): number {
 function parseArgs(argv: string[]): CliOptions {
   let dropTopPercent = 1;
   let dropBottomPercent = 10;
+  let batchSize = 1000;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--dropTopPercent") {
@@ -63,9 +65,19 @@ function parseArgs(argv: string[]): CliOptions {
       i += 1;
       continue;
     }
+    if (arg === "--batchSize") {
+      const value = argv[i + 1];
+      if (!value) throw new Error("--batchSize requires a value.");
+      batchSize = Number.parseInt(value, 10);
+      if (!Number.isFinite(batchSize) || batchSize < 1 || batchSize > 5000) {
+        throw new Error(`--batchSize must be an integer in range [1, 5000]. Received: ${value}`);
+      }
+      i += 1;
+      continue;
+    }
     throw new Error(`Unknown argument: ${arg}`);
   }
-  return { dropTopPercent, dropBottomPercent };
+  return { dropTopPercent, dropBottomPercent, batchSize };
 }
 
 function parseBlacklist(): Set<string> {
@@ -207,25 +219,12 @@ function buildRows(
   return { rows, dropped };
 }
 
-async function importRows(rows: WordRow[]): Promise<void> {
+async function importRows(rows: WordRow[], batchSize: number): Promise<void> {
   const pool = createPool();
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-
-    const sql = `
-      INSERT INTO words (language, word, length, freq_score, difficulty, tags)
-      VALUES ('tr', $1, $2, $3, $4::difficulty_level, $5::jsonb)
-      ON CONFLICT (language, word)
-      DO UPDATE
-      SET
-        length = EXCLUDED.length,
-        freq_score = EXCLUDED.freq_score,
-        difficulty = EXCLUDED.difficulty,
-        tags = COALESCE(words.tags, '{}'::jsonb) || EXCLUDED.tags,
-        updated_at = now();
-    `;
 
     const difficultyCounts: Record<Difficulty, number> = {
       easy: 0,
@@ -234,15 +233,38 @@ async function importRows(rows: WordRow[]): Promise<void> {
       expert: 0,
     };
 
-    for (const row of rows) {
-      await client.query(sql, [
-        row.word,
-        row.length,
-        row.freqScore,
-        row.difficulty,
-        JSON.stringify(row.tags),
-      ]);
-      difficultyCounts[row.difficulty] += 1;
+    for (let offset = 0; offset < rows.length; offset += batchSize) {
+      const batch = rows.slice(offset, offset + batchSize);
+      const values: string[] = [];
+      const params: Array<string | number> = [];
+
+      batch.forEach((row, idx) => {
+        const base = idx * 5;
+        values.push(`('tr', $${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}::difficulty_level, $${base + 5}::jsonb)`);
+        params.push(row.word, row.length, row.freqScore, row.difficulty, JSON.stringify(row.tags));
+        difficultyCounts[row.difficulty] += 1;
+      });
+
+      await client.query(
+        `
+          INSERT INTO words (language, word, length, freq_score, difficulty, tags)
+          VALUES ${values.join(",\n")}
+          ON CONFLICT (language, word)
+          DO UPDATE
+          SET
+            length = EXCLUDED.length,
+            freq_score = EXCLUDED.freq_score,
+            difficulty = EXCLUDED.difficulty,
+            tags = COALESCE(words.tags, '{}'::jsonb) || EXCLUDED.tags,
+            updated_at = now();
+        `,
+        params,
+      );
+
+      const imported = Math.min(offset + batch.length, rows.length);
+      if (imported === rows.length || imported % (batchSize * 10) === 0) {
+        console.log(`Imported progress: ${imported}/${rows.length}`);
+      }
     }
 
     await client.query("COMMIT");
@@ -283,7 +305,7 @@ async function main(): Promise<void> {
     console.log(`  ${row.word},${row.count}`);
   }
 
-  await importRows(rows);
+  await importRows(rows, options.batchSize);
 }
 
 main().catch((error) => {

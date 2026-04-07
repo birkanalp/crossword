@@ -1,6 +1,6 @@
 # Frontend Status
-**contractVersion:** 1.2.5
-**lastUpdated:** 2026-03-02
+**contractVersion:** 1.3.1
+**lastUpdated:** 2026-04-07
 **owner:** frontend-agent
 
 ---
@@ -21,7 +21,7 @@
 | 10 | Score adapter (FilledCells → answers map) | ✅ Done | `api.contract.json#/endpoints/submitScore/requestBody` | `{ "1A": "WORD", "3D": "..." }` format |
 | 11 | `getLevel` hook | ✅ Done | `api.contract.json#/endpoints/getLevel` | GET `/getLevel?id=`, handles `{ level, progress }` envelope |
 | 12 | `submitScore` mutation | ✅ Done | `api.contract.json#/endpoints/submitScore` | POST `/submitScore`; requires Bearer JWT |
-| 13 | `mergeGuestProgress` mutation | ✅ Done | `api.contract.json#/endpoints/mergeGuestProgress` | POST `/mergeGuestProgress`; called after login |
+| 13 | `mergeGuestProgress` mutation | ✅ Done | `api.contract.json#/endpoints/mergeGuestProgress` | POST `/mergeGuestProgress`; centralized in root auth state listener; retries while guestId is retained |
 | 14 | Analytics events aligned to contract | ✅ Done | `events.contract.md` | `puzzle_started`, `puzzle_completed`, `puzzle_abandoned`, etc. |
 | 15 | Sentry scaffold | ✅ Done | — | `src/lib/sentry.ts`; init in root layout |
 | 16 | RevenueCat scaffold | ✅ Done | — | `src/lib/revenuecat.ts`; entitlement checks, purchase flow |
@@ -113,6 +113,7 @@ Before implementing any screen or hook that touches the API:
 
 | Date | Version | Notes |
 |------|---------|-------|
+| 2026-04-07 | 1.3.1 | Guest → login merge hardening: dashboard remains first screen, root auth listener is the single merge owner, authenticated level/daily/list/checkWord requests send Bearer JWT, and successful merge invalidates progress-sensitive query caches. |
 | 2026-03-02 | 1.2.5 | Coin shop screen: `app/store.tsx` fully implemented (featured/regular/discount cards, dark mode, bottom-sheet purchase modal). `useCoinPackages` hook wired to GET /getCoinPackages. `expo-linear-gradient ~14.0.0` added to dependencies. RevenueCat purchase step is a placeholder stub. |
 | 2026-02-25 | 1.0.1 | Fixed non-UUID level navigation: home → /game/levels; useLevel UUID guard; level screen error handling + retry. CR-009 listLevels. |
 | 2026-02-21 | 1.0.0 | Phase 1 complete. Initial audit vs. backend contracts. 8 CRs filed. |

@@ -147,7 +147,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const { data: guestUnlocks } = await db
       .from("user_level_unlocks")
       .select("level_id, unlocked_at")
-      .eq("guest_id", guestId);
+      .eq("guest_id", guest_id);
 
     const guestUnlockRows = (guestUnlocks ?? []) as { level_id: string; unlocked_at: string }[];
 
@@ -168,7 +168,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       await db
         .from("user_level_unlocks")
         .delete()
-        .eq("guest_id", guestId);
+        .eq("guest_id", guest_id);
     }
   } catch (err) {
     console.error("[mergeGuestProgress] unlock migration error:", err);

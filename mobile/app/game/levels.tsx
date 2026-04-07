@@ -57,6 +57,7 @@ export default function LevelsScreen() {
   const styles = makeStyles(isDark, width);
   const user = useUserStore(selectUser);
   const guestId = user?.type === 'guest' ? user.guestId : undefined;
+  const authToken = user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [paywallVisible, setPaywallVisible] = useState(false);
@@ -108,6 +109,7 @@ export default function LevelsScreen() {
     INITIAL_LIMIT + PAGE_SIZE * (pages[diff] ?? 0);
   const sharedListOpts = {
     ...(guestId !== undefined ? { guestId } : {}),
+    ...(authToken !== undefined ? { authToken } : {}),
     hide_completed: hideCompleted,
     offset: 0,
   };

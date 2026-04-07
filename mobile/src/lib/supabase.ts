@@ -77,6 +77,22 @@ export function createDefaultProfile(userId: string, username?: string): UserPro
   };
 }
 
+export function createAuthenticatedProfile(
+  userId: string,
+  username: string,
+  remoteProfile?: UserProfile | null,
+  fallbackProfile?: UserProfile | null,
+): UserProfile {
+  const profile = remoteProfile ?? fallbackProfile;
+  if (!profile) return createDefaultProfile(userId, username);
+
+  return {
+    ...profile,
+    userId,
+    username: profile.username ?? username,
+  };
+}
+
 export async function getCurrentSession(): Promise<Session | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getSession();

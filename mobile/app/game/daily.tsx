@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useDailyPuzzle } from '@/api/hooks/useLevels';
+import { useUserStore, selectUser } from '@/store/userStore';
 import { Colors } from '@/constants/colors';
 
 // ─── Daily Puzzle Screen ──────────────────────────────────────────────────────
@@ -13,8 +14,14 @@ export default function DailyScreen() {
   const scheme = useColorScheme() ?? 'light';
   const isDark = scheme === 'dark';
   const styles = makeStyles(isDark);
+  const user = useUserStore(selectUser);
+  const guestId = user?.type === 'guest' ? user.guestId : undefined;
+  const authToken = user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
 
-  const { data: daily, isLoading, isError, refetch } = useDailyPuzzle();
+  const { data: daily, isLoading, isError, refetch } = useDailyPuzzle({
+    ...(guestId !== undefined ? { guestId } : {}),
+    ...(authToken !== undefined ? { authToken } : {}),
+  });
 
   // Once the daily is loaded, navigate into it as a regular level
   useEffect(() => {

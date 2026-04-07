@@ -15,7 +15,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { ConfigErrorScreen } from '@/components/ConfigErrorScreen';
 import { getCriticalConfigIssues } from '@/config/runtime';
-import { supabase, buildAuthenticatedUser, createDefaultProfile } from '@/lib/supabase';
+import { supabase, buildAuthenticatedUser, createAuthenticatedProfile } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { apiRequest } from '@/api/client';
 import { clearUserContext, setUserContext } from '@/lib/sentry';
@@ -96,7 +96,7 @@ function RootNavigator() {
   }, [isReady]);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!isReady || !supabase) return;
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       void (async () => {
@@ -123,6 +123,9 @@ function RootNavigator() {
 
             if (!mergeResult.error) {
               mergedGuestId = null;
+              void queryClient.invalidateQueries({ queryKey: ['levels'] });
+              void queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+              void queryClient.invalidateQueries({ queryKey: ['profile'] });
             } else {
               console.warn('[auth] guest progress merge failed:', mergeResult.error);
             }
@@ -137,7 +140,12 @@ function RootNavigator() {
             .getState()
             .setAuthenticatedUser(
               authenticatedUser,
-              remoteProfile ?? currentProfile ?? createDefaultProfile(authenticatedUser.id, authenticatedUser.username),
+              createAuthenticatedProfile(
+                authenticatedUser.id,
+                authenticatedUser.username,
+                remoteProfile,
+                currentProfile,
+              ),
             );
           setUserContext(authenticatedUser.id, false);
           initAnalytics(authenticatedUser.id);
@@ -156,7 +164,7 @@ function RootNavigator() {
     return () => {
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [isReady]);
 
   if (!isReady) {
     // Splash screen is still visible — render nothing

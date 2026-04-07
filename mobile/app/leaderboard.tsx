@@ -78,6 +78,7 @@ export default function LeaderboardScreen() {
 
   const user = useUserStore(selectUser);
   const guestId = user?.type === 'guest' ? user.guestId : undefined;
+  const authToken = user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
 
   const tab = TABS[activeTab] ?? TABS[0]!;
   const currentPage = pages[activeTab] ?? 0;
@@ -93,6 +94,7 @@ export default function LeaderboardScreen() {
     limit: 50,
     page: currentPage,
     ...(guestId !== undefined ? { guestId } : {}),
+    ...(authToken !== undefined ? { authToken } : {}),
   });
 
   const handleRefresh = useCallback(async () => {

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(process.cwd());
@@ -72,14 +72,78 @@ function logTopTokens(counts: Map<string, number>, limit: number): void {
   }
 }
 
-function main(): void {
-  const inputPath = resolveInputPath();
-  const content = readFileSync(inputPath, "utf8");
+function processToken(
+  rawToken: string,
+  stopwords: Set<string>,
+  counts: Map<string, number>,
+  dropped: Record<DropReason, number>,
+): void {
+  dropped["total-raw"] += 1;
+
+  const trimmedRaw = rawToken.trim();
+  if (!trimmedRaw) {
+    dropped.empty += 1;
+    return;
+  }
+  if (/^&[a-zA-Z#0-9]+;$/.test(trimmedRaw)) {
+    dropped.entity += 1;
+    return;
+  }
+  const normalized = normalizeToken(trimmedRaw);
+  if (!normalized) {
+    dropped.empty += 1;
+    return;
+  }
+  if (FILE_EXT_WITH_DOT_REGEX.test(normalized) || FILE_EXT_TOKEN_REGEX.test(normalized)) {
+    dropped["file-ext"] += 1;
+    return;
+  }
+  if (!TOKEN_ACCEPT_REGEX.test(normalized)) {
+    dropped["non-letter"] += 1;
+    return;
+  }
+  if (normalized.length < 3) {
+    dropped["too-short"] += 1;
+    return;
+  }
+  if (normalized.length > 20) {
+    dropped["too-long"] += 1;
+    return;
+  }
+  if (stopwords.has(normalized)) {
+    dropped.stopword += 1;
+    return;
+  }
+  counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+}
+
+function processChunk(
+  chunk: string,
+  carry: string,
+  stopwords: Set<string>,
+  counts: Map<string, number>,
+  dropped: Record<DropReason, number>,
+): string {
+  const content = carry + chunk;
+  const endsWithWhitespace = /\s$/.test(content);
   const rawTokens = content.match(RAW_TOKEN_REGEX) ?? [];
+
+  if (rawTokens.length === 0) return endsWithWhitespace ? "" : content;
+
+  const tokensToProcess = endsWithWhitespace ? rawTokens : rawTokens.slice(0, -1);
+  for (const rawToken of tokensToProcess) {
+    processToken(rawToken, stopwords, counts, dropped);
+  }
+
+  return endsWithWhitespace ? "" : rawTokens[rawTokens.length - 1] ?? "";
+}
+
+async function main(): Promise<void> {
+  const inputPath = resolveInputPath();
   const stopwords = loadStopwords();
   const counts = new Map<string, number>();
   const dropped: Record<DropReason, number> = {
-    "total-raw": rawTokens.length,
+    "total-raw": 0,
     entity: 0,
     "file-ext": 0,
     stopword: 0,
@@ -89,42 +153,13 @@ function main(): void {
     empty: 0,
   };
 
-  for (const rawToken of rawTokens) {
-    const trimmedRaw = rawToken.trim();
-    if (!trimmedRaw) {
-      dropped.empty += 1;
-      continue;
-    }
-    if (/^&[a-zA-Z#0-9]+;$/.test(trimmedRaw)) {
-      dropped.entity += 1;
-      continue;
-    }
-    const normalized = normalizeToken(trimmedRaw);
-    if (!normalized) {
-      dropped.empty += 1;
-      continue;
-    }
-    if (FILE_EXT_WITH_DOT_REGEX.test(normalized) || FILE_EXT_TOKEN_REGEX.test(normalized)) {
-      dropped["file-ext"] += 1;
-      continue;
-    }
-    if (!TOKEN_ACCEPT_REGEX.test(normalized)) {
-      dropped["non-letter"] += 1;
-      continue;
-    }
-    if (normalized.length < 3) {
-      dropped["too-short"] += 1;
-      continue;
-    }
-    if (normalized.length > 20) {
-      dropped["too-long"] += 1;
-      continue;
-    }
-    if (stopwords.has(normalized)) {
-      dropped.stopword += 1;
-      continue;
-    }
-    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  let carry = "";
+  const stream = createReadStream(inputPath, { encoding: "utf8" });
+  for await (const chunk of stream) {
+    carry = processChunk(chunk, carry, stopwords, counts, dropped);
+  }
+  if (carry) {
+    processToken(carry, stopwords, counts, dropped);
   }
 
   const rows = toCsvRows(counts);
@@ -141,4 +176,8 @@ function main(): void {
   console.log(`Output file: ${OUTPUT_PATH.replace(`${ROOT}/`, "")}`);
 }
 
-main();
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`TR frequency build failed: ${message}`);
+  process.exit(1);
+});

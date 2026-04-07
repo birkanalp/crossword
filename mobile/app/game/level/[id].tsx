@@ -76,9 +76,9 @@ export default function LevelScreen() {
   const user = useUserStore(selectUser);
   const coins = useUserStore(selectCoins);
   const guestId: string | undefined = user?.type === 'guest' ? user.guestId : undefined;
-  // JWT from authenticated user — undefined for guests (sign-in not yet implemented)
   const authToken: string | undefined =
     user?.type === 'authenticated' ? (user.jwt ?? undefined) : undefined;
+  const identityOptions = guestId ? { guestId } : authToken ? { authToken } : {};
 
   const { mutate: submitScore } = useSubmitScore();
 
@@ -94,7 +94,7 @@ export default function LevelScreen() {
   // ─── Remote data ─────────────────────────────────────────────────────────
   const { data: levelData, isLoading, isError, error, refetch } = useLevel(
     id ?? null,
-    guestId ? { guestId } : {},
+    identityOptions,
   );
   const idInvalid = id != null && !isValidLevelId(id);
 
@@ -429,6 +429,7 @@ export default function LevelScreen() {
           normalizeTurkishWord(buffer.join('')),
           {
             ...(guestId ? { guestId } : {}),
+            ...(authToken ? { authToken } : {}),
             requestId: uuidv4(),
             stateJson: storeAtSubmit.filledCells,
             timeSpent: storeAtSubmit.elapsedTime,
@@ -480,7 +481,6 @@ export default function LevelScreen() {
         setFlashClueId(null);
       }, 850);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [levelData?.level.id, guestId, authToken, haptics, shakeX, isReplay],
   );
 

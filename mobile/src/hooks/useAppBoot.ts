@@ -6,7 +6,7 @@ import { setUserContext } from '@/lib/sentry';
 import { initAnalytics } from '@/lib/analytics';
 import { initRevenueCat } from '@/lib/revenuecat';
 import { createGuestUser } from '@/domain/user/guest';
-import { getCurrentSession, buildAuthenticatedUser, createDefaultProfile } from '@/lib/supabase';
+import { getCurrentSession, buildAuthenticatedUser, createAuthenticatedProfile } from '@/lib/supabase';
 
 // ─── App Boot Hook ────────────────────────────────────────────────────────────
 // Runs on first mount. Restores persisted user + settings, or creates guest.
@@ -39,7 +39,12 @@ export function useAppBoot(): { isReady: boolean } {
           const authenticatedUser = buildAuthenticatedUser(session, guestId, savedProfile);
           hydrateUser(
             authenticatedUser,
-            savedProfile ?? createDefaultProfile(authenticatedUser.id, authenticatedUser.username),
+            createAuthenticatedProfile(
+              authenticatedUser.id,
+              authenticatedUser.username,
+              null,
+              savedProfile,
+            ),
             savedStreak ?? {
               currentStreak: 0,
               longestStreak: 0,

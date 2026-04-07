@@ -33,4 +33,4 @@ ALTER TABLE levels
 
 CREATE INDEX IF NOT EXISTS idx_levels_ai_review_status
   ON levels(review_status, created_at DESC)
-  WHERE deleted_at IS NULL AND review_status = 'ai_review';
+  WHERE deleted_at IS NULL;

@@ -116,7 +116,7 @@ SET
   review_status = COALESCE(review_status, 'approved'::level_review_status),
   language = COALESCE(language, 'tr'),
   target_difficulty = COALESCE(target_difficulty, difficulty),
-  computed_difficulty_score = COALESCE(computed_difficulty_score, CASE difficulty WHEN 'easy' THEN 25 WHEN 'medium' THEN 50 WHEN 'hard' THEN 75 WHEN 'expert' THEN 100 END),
+  computed_difficulty_score = COALESCE(computed_difficulty_score, CASE difficulty WHEN 'easy' THEN 25 WHEN 'medium' THEN 50 WHEN 'hard' THEN 75 END),
   grid_size = COALESCE(grid_size, NULLIF((grid_json->>'rows')::INT, 0), 8),
   word_count = COALESCE(word_count, GREATEST(2, COALESCE(jsonb_array_length(clues_json->'across'), 0) + COALESCE(jsonb_array_length(clues_json->'down'), 0))),
   words_breakdown = COALESCE(words_breakdown, jsonb_build_object('easy', 0, 'medium', 0, 'hard', 0, 'expert', 0)),
@@ -308,8 +308,7 @@ INSERT INTO difficulty_profiles (
 VALUES
   ('easy',   '{"easy":0.70,"medium":0.25,"hard":0.05,"expert":0.00}'::jsonb, 8, 10, 8, 12, 30, 60),
   ('medium', '{"easy":0.40,"medium":0.45,"hard":0.15,"expert":0.00}'::jsonb, 9, 12, 10, 15, 30, 70),
-  ('hard',   '{"easy":0.15,"medium":0.45,"hard":0.30,"expert":0.10}'::jsonb, 10, 14, 12, 18, 30, 78),
-  ('expert', '{"easy":0.05,"medium":0.25,"hard":0.45,"expert":0.25}'::jsonb, 11, 15, 14, 22, 21, 85)
+  ('hard',   '{"easy":0.15,"medium":0.45,"hard":0.30,"expert":0.10}'::jsonb, 10, 14, 12, 18, 30, 78)
 ON CONFLICT (name) DO UPDATE SET
   ratios = EXCLUDED.ratios,
   grid_min = EXCLUDED.grid_min,

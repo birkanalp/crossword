@@ -1,4 +1,8 @@
--- Fix supabase_storage_admin role password.
--- The storage container authenticates as this role using POSTGRES_PASSWORD.
--- This ensures the role has a password set after a fresh volume / docker:reset.
-ALTER ROLE supabase_storage_admin WITH PASSWORD 'your-super-secret-and-long-postgres-password';
+-- Historical local Docker-only migration.
+-- Supabase Cloud reserves supabase_storage_admin and does not allow project
+-- migrations to alter it. Local storage role passwords must be handled by the
+-- local environment, not production schema migration.
+DO $$
+BEGIN
+  RAISE NOTICE '[013] Skipped local storage admin password fix in production migration.';
+END $$;

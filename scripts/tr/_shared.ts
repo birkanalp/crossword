@@ -39,9 +39,16 @@ export function normalizeTurkishWord(raw: string): string {
 export function createPool(): Pool {
   const dotenv = loadEnvFromDotenv();
   const connectionString = pickEnv("DATABASE_URL", dotenv);
+  const sslMode = pickEnv("PGSSLMODE", dotenv);
+  const ssl =
+    sslMode === "require" || sslMode === "no-verify"
+      ? {
+          rejectUnauthorized: false,
+        }
+      : undefined;
 
   return connectionString
-    ? new Pool({ connectionString })
+    ? new Pool({ connectionString, ssl })
     : new Pool({
         host: pickEnv("PGHOST", dotenv) ?? "127.0.0.1",
         port: Number.parseInt(pickEnv("PGPORT", dotenv) ?? pickEnv("POSTGRES_PORT", dotenv) ?? "54322", 10),
@@ -51,6 +58,7 @@ export function createPool(): Pool {
           pickEnv("PGPASSWORD", dotenv) ??
           pickEnv("POSTGRES_PASSWORD", dotenv) ??
           "your-super-secret-and-long-postgres-password",
+        ssl,
       });
 }
 

@@ -10,9 +10,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Default: cron enabled
+-- Default: cron disabled. Enable only after production word import and content
+-- generation pipeline are verified.
 INSERT INTO app_settings (key, value, updated_at)
-VALUES ('puzzle_generation_cron_enabled', 'true'::jsonb, now())
+VALUES ('puzzle_generation_cron_enabled', 'false'::jsonb, now())
 ON CONFLICT (key) DO NOTHING;
 
 -- RLS: only service_role writes; anon/authenticated cannot read (cron uses direct connection)

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS coin_packages (
   badge                 TEXT
                           CHECK (badge IN ('popular', 'best_value', 'new', 'limited')),
   is_featured           BOOLEAN        NOT NULL DEFAULT FALSE,
-  is_active             BOOLEAN        NOT NULL DEFAULT TRUE,
+  is_active             BOOLEAN        NOT NULL DEFAULT FALSE,
   sort_order            INTEGER        NOT NULL DEFAULT 0,
   revenuecat_product_id TEXT,
   created_at            TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
@@ -103,7 +103,9 @@ END
 $$;
 
 -- ---------------------------------------------------------------------------
--- Seed: 5 example packages (idempotent — only inserts if table is empty)
+-- Seed: 5 inactive example packages (idempotent — only inserts if table is empty).
+-- Production packages must be reviewed and activated from the admin panel after
+-- RevenueCat product identifiers are configured.
 -- ---------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -112,10 +114,10 @@ BEGIN
       (name, description, coin_amount, price_usd, original_price_usd,
        discount_percent, badge, is_featured, is_active, sort_order, revenuecat_product_id)
     VALUES
-      ('Küçük Paket',  '10 coin ile başla',         10,  0.99, NULL,   0, NULL,         FALSE, TRUE,  1, 'coins_10'),
-      ('Orta Paket',   '20 coin + bonus',            20,  1.99, NULL,   0, 'popular',    FALSE, TRUE,  2, 'coins_20'),
-      ('Büyük Paket',  '50 coin - popüler tercih',   50,  3.99, 4.99,  20, 'best_value', TRUE,  TRUE,  3, 'coins_50'),
-      ('Mega Paket',   '100 coin + %30 indirim',    100,  6.99, 9.99,  30, 'best_value', FALSE, TRUE,  4, 'coins_100'),
+      ('Küçük Paket',  '10 coin ile başla',         10,  0.99, NULL,   0, NULL,         FALSE, FALSE, 1, 'coins_10'),
+      ('Orta Paket',   '20 coin + bonus',            20,  1.99, NULL,   0, 'popular',    FALSE, FALSE, 2, 'coins_20'),
+      ('Büyük Paket',  '50 coin - popüler tercih',   50,  3.99, 4.99,  20, 'best_value', TRUE,  FALSE, 3, 'coins_50'),
+      ('Mega Paket',   '100 coin + %30 indirim',    100,  6.99, 9.99,  30, 'best_value', FALSE, FALSE, 4, 'coins_100'),
       ('Süper Paket',  '200 coin özel fiyat',       200, 12.99, 19.99, 35, 'limited',    FALSE, FALSE, 5, 'coins_200');
   END IF;
 END

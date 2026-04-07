@@ -52,6 +52,14 @@ CREATE POLICY "admin_todos: admins delete"
   TO authenticated
   USING (COALESCE(auth.jwt() -> 'app_metadata' ->> 'role', '') = 'admin');
 
+DO $$
+BEGIN
+  IF current_setting('app.seed_admin_todos', true) IS DISTINCT FROM 'true' THEN
+    RAISE NOTICE '[022] Skipped admin_todos backlog seed. Set app.seed_admin_todos=true before migration to opt in.';
+    RETURN;
+  END IF;
+END $$;
+
 WITH seed(title, body, status, sort_order) AS (
   VALUES
     ('RevenueCat API anahtarlarını yapılandır', 'app.json: revenueCatApiKeyIos, revenueCatApiKeyAndroid', 'backlog', 10),
@@ -133,4 +141,5 @@ Dev ortamı için test ID zaten ayarlı, üretim build''i için gerekli.', 'bloc
 INSERT INTO admin_todos (title, body, status, sort_order)
 SELECT seed.title, seed.body, seed.status, seed.sort_order
 FROM seed
-WHERE NOT EXISTS (SELECT 1 FROM admin_todos);
+WHERE current_setting('app.seed_admin_todos', true) = 'true'
+  AND NOT EXISTS (SELECT 1 FROM admin_todos);

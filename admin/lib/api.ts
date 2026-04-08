@@ -22,6 +22,7 @@ export interface AdminPuzzleSummary {
 
 export interface AdminClue {
   number: number;
+  question?: string;
   clue: string;
   answer_length: number;
   start: { row: number; col: number };

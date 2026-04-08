@@ -73,7 +73,7 @@ export function buildCluesFromLevel(level: AdminLevel): ClueForDisplay[] {
       id: `${c.number}${dir === 'across' ? 'A' : 'D'}`,
       number: c.number,
       direction: dir,
-      text: c.clue ?? '',
+      text: c.clue ?? c.question ?? '',
       startRow: start.row,
       startCol: start.col,
       length: c.answer_length ?? 0,

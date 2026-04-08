@@ -54,3 +54,6 @@ verify_jwt = true    # must be authenticated
 
 [functions.revealLetter]
 verify_jwt = false   # guests (no JWT) must be able to call this
+
+[functions.admin]
+verify_jwt = false   # browser preflight must reach function; requireAdmin enforces JWT role

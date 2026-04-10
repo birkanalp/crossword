@@ -32,10 +32,12 @@ import { computeLevelAnswerHash } from "../_shared/anticheat.ts";
 import { fetchLeaderboardEntries } from "../_shared/leaderboard.ts";
 import {
   runDeterministicChecks,
-  runLlmAdvisoryReview,
+  runOpenAIReview,
+  runHintGeneration,
   makeReviewDecision,
   type CluesJson as ReviewCluesJson,
   type GridJson as ReviewGridJson,
+  type PuzzleReviewResult,
 } from "../_shared/review.ts";
 
 interface ClueRecord {
@@ -912,10 +914,15 @@ async function handleAiReview(id: string): Promise<Response> {
     return errorResponse("Level is being reviewed by another process", 409);
   }
 
-  const clues = level.clues_json as ReviewCluesJson;
-  const grid = level.grid_json as ReviewGridJson;
-  const ollamaBaseUrl = Deno.env.get("OLLAMA_BASE_URL") ?? "http://ollama:11434";
-  const ollamaModel = Deno.env.get("OLLAMA_MODEL") ?? "qwen2.5:3b";
+  const clues        = level.clues_json as ReviewCluesJson;
+  const grid         = level.grid_json as ReviewGridJson;
+  const openaiApiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
+  const openaiModel  = Deno.env.get("OPENAI_REVIEW_MODEL") ?? "gpt-4o-mini";
+
+  if (!openaiApiKey) {
+    await db.from("levels").update({ review_status: "pending" }).eq("id", id);
+    return errorResponse("AI review not configured: OPENAI_API_KEY missing", 503);
+  }
 
   // ── Phase 1: Deterministic checks ────────────────────────────────────────
   const detResult = runDeterministicChecks(clues, grid);
@@ -925,62 +932,79 @@ async function handleAiReview(id: string): Promise<Response> {
   );
 
   if (!detResult.passed) {
-    // Reject immediately, no LLM call needed
+    // Reject immediately — no OpenAI call needed
     const decision = makeReviewDecision(detResult, null);
     await db.from("levels").update({
-      review_status: "rejected",
-      ai_review_notes: decision.feedback,
-      ai_reviewed_at: new Date().toISOString(),
-      ai_review_score: 0,
+      review_status:          "rejected",
+      ai_review_notes:        decision.feedback,
+      ai_reviewed_at:         new Date().toISOString(),
+      ai_review_score:        0,
       deterministic_failures: detResult.failures,
-      llm_raw_response: null,
-      llm_clue_scores: null,
-      review_rejected_by: "deterministic",
+      llm_raw_response:       null,
+      llm_clue_scores:        null,
+      llm_clue_reviews:       null,
+      review_rejected_by:     "deterministic",
+      needs_human_review:     false,
+      ai_auto_fix_count:      0,
     }).eq("id", id);
 
     return jsonResponse({
-      passed: false,
-      score: 0,
-      issues: decision.issues,
-      feedback: decision.feedback,
+      passed:        false,
+      score:         0,
+      issues:        decision.issues,
+      feedback:      decision.feedback,
       review_status: "rejected",
-      rejected_by: "deterministic",
+      rejected_by:   "deterministic",
     });
   }
 
-  // ── Phase 2: LLM advisory review ─────────────────────────────────────────
-  let llmResult;
+  // ── Phase 2: OpenAI advisory review ──────────────────────────────────────
+  let reviewResult: PuzzleReviewResult;
   try {
-    llmResult = await runLlmAdvisoryReview(clues, ollamaBaseUrl, ollamaModel, 240_000);
+    reviewResult = await runOpenAIReview(clues, {
+      apiKey:    openaiApiKey,
+      model:     openaiModel,
+      timeoutMs: 90_000,
+    });
     console.log(
-      `[admin] ai-review ${id}: LLM avg=${llmResult.avgScore} low=${llmResult.lowCount} ` +
-      `→ ${llmResult.passed ? "PASS" : "FAIL"}`,
+      `[admin] ai-review ${id}: OpenAI score=${reviewResult.puzzleScore} ` +
+      `fixes=${reviewResult.autoFixCount} humanReview=${reviewResult.needsHumanReview} ` +
+      `→ ${reviewResult.passed ? "PASS" : "FAIL"}`,
     );
   } catch (e) {
-    console.error("[admin] LLM advisory review error:", e);
-    // On LLM failure, revert to pending — do not permanently reject
+    console.error("[admin] OpenAI advisory review error:", e);
+    // On OpenAI failure, revert to pending — do not permanently reject
     await db.from("levels").update({ review_status: "pending" }).eq("id", id);
     return errorResponse("AI review service unavailable", 503);
   }
 
-  const decision = makeReviewDecision(detResult, llmResult);
-  // %80 ve üzeri puan → otomatik onay; altı → insan incelemesi bekler
-  const newStatus = !decision.passed ? "rejected" : decision.score >= 80 ? "approved" : "pending";
+  const decision = makeReviewDecision(detResult, reviewResult);
+  // score >= 80 and no human review needed → auto-approve
+  const newStatus = !decision.passed
+    ? "rejected"
+    : (decision.score >= 80 && !decision.needsHumanReview ? "approved" : "pending");
   const aiNotes =
     decision.feedback +
     (decision.issues.length > 0
       ? "\n\nSorunlar: " + decision.issues.slice(0, 5).join(", ")
       : "");
 
+  // Apply auto-fixed clue texts and generated hints back to clues_json
+  const newCluesJson = applyAdminReviewToCluesJson(clues, reviewResult);
+
   const { error: updateErr } = await db.from("levels").update({
-    review_status: newStatus,
-    ai_review_notes: aiNotes,
-    ai_reviewed_at: new Date().toISOString(),
-    ai_review_score: decision.score,
+    review_status:          newStatus,
+    ai_review_notes:        aiNotes,
+    ai_reviewed_at:         new Date().toISOString(),
+    ai_review_score:        decision.score,
     deterministic_failures: detResult.failures,
-    llm_raw_response: llmResult.rawResponse ?? null,
-    llm_clue_scores: llmResult.clueScores ?? null,
-    review_rejected_by: decision.rejectedBy ?? null,
+    llm_raw_response:       null,
+    llm_clue_scores:        decision.llmClueScores ?? null,
+    llm_clue_reviews:       reviewResult.items,
+    review_rejected_by:     decision.rejectedBy ?? null,
+    needs_human_review:     decision.needsHumanReview,
+    ai_auto_fix_count:      decision.autoFixCount,
+    clues_json:             newCluesJson,
   }).eq("id", id);
 
   if (updateErr) {
@@ -989,14 +1013,40 @@ async function handleAiReview(id: string): Promise<Response> {
   }
 
   return jsonResponse({
-    passed: decision.passed,
-    score: decision.score,
-    issues: decision.issues,
-    feedback: decision.feedback,
-    review_status: newStatus,
-    auto_approved: newStatus === "approved",
-    rejected_by: decision.rejectedBy ?? null,
+    passed:             decision.passed,
+    score:              decision.score,
+    issues:             decision.issues,
+    feedback:           decision.feedback,
+    review_status:      newStatus,
+    auto_approved:      newStatus === "approved",
+    rejected_by:        decision.rejectedBy ?? null,
+    needs_human_review: decision.needsHumanReview,
+    auto_fix_count:     decision.autoFixCount,
+    hint_count:         reviewResult.items.filter((r) => r.hint !== null).length,
   });
+}
+
+function applyAdminReviewToCluesJson(
+  clues: ReviewCluesJson,
+  review: PuzzleReviewResult,
+): ReviewCluesJson {
+  const reviewMap = new Map(review.items.map((r) => [r.clueId, r]));
+  const applyDir = (
+    list: ReviewCluesJson["across"],
+    suffix: "A" | "D",
+  ): ReviewCluesJson["across"] =>
+    list.map((c) => {
+      const r = reviewMap.get(`${c.number}${suffix}`);
+      if (!r) return c;
+      const updated: typeof c = { ...c };
+      if (r.fixedClue) updated.question = r.fixedClue;
+      if (r.hint)      updated.hint     = r.hint;
+      return updated;
+    });
+  return {
+    across: applyDir(clues.across ?? [], "A"),
+    down:   applyDir(clues.down   ?? [], "D"),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1317,59 +1367,23 @@ async function handleGenerateHints(id: string): Promise<Response> {
     return jsonResponse({ updated: 0, message: "All clues already have hints" });
   }
 
-  const lines = entries.map((e) => `[${e.key}] Soru: "${e.question}" | Cevap: "${e.answer}"`).join("\n");
+  const openaiApiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
+  const openaiModel  = Deno.env.get("OPENAI_REVIEW_MODEL") ?? "gpt-4o-mini";
 
-  const promptText = `Sen bir Türkçe bulmaca ipucu yazarısın. Her soru-cevap çifti için kısa bir ipucu üret.
-İpucu: Cevabı doğrudan verme, oyuncuyu yönlendir (1-2 cümle, Türkçe).
-Aile dostu ve net olsun.
+  if (!openaiApiKey) {
+    return errorResponse("AI hint service not configured: OPENAI_API_KEY missing", 503);
+  }
 
-Soru-Cevap listesi:
-${lines}
-
-SADECE geçerli JSON döndür (başka hiçbir şey ekleme). Her anahtar için ipucu metni:
-{ "hints": { "1A": "ipucu metni", "2D": "ipucu metni", ... } }`;
-
-  const ollamaBaseUrl = Deno.env.get("OLLAMA_BASE_URL") ?? "http://ollama:11434";
-  const ollamaModel = Deno.env.get("OLLAMA_MODEL") ?? "qwen2.5:3b";
-
-  let hintsResult: { hints: Record<string, string> };
+  let hintsMap: Record<string, string>;
   try {
-    const ollamaRes = await fetch(`${ollamaBaseUrl}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: ollamaModel,
-        prompt: promptText,
-        stream: false,
-        format: {
-          type: "object",
-          properties: {
-            hints: {
-              type: "object",
-              additionalProperties: { type: "string" },
-            },
-          },
-          required: ["hints"],
-        },
-      }),
-    });
-
-    if (!ollamaRes.ok) {
-      console.error("[admin] Ollama hints API error:", ollamaRes.status);
-      return errorResponse("AI hint service unavailable", 503);
-    }
-
-    const ollamaData = await ollamaRes.json();
-    const content = (ollamaData.response ?? "") as string;
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON in Ollama response");
-    hintsResult = JSON.parse(jsonMatch[0]);
+    hintsMap = await runHintGeneration(
+      entries.map((e) => ({ id: e.key, question: e.question, answer: e.answer })),
+      { apiKey: openaiApiKey, model: openaiModel },
+    );
   } catch (e) {
     console.error("[admin] AI hints error:", e);
     return errorResponse("AI hint generation failed", 503);
   }
-
-  const hintsMap = hintsResult.hints ?? {};
   let updatedCount = 0;
 
   const updateClueHint = (list: ClueRecord[], dir: "across" | "down") => {
